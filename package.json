@@ -1,0 +1,17 @@
+{
+  "name": "quo-docs",
+  "version": "0.1.0",
+  "description": "Documentation for Quo - Crystal Query Builder",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "keywords": ["crystal", "query-builder", "orm", "documentation"],
+  "author": "Alexandre Lairan",
+  "license": "MIT",
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

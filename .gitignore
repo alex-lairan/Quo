@@ -1,0 +1,28 @@
+# Crystal
+/lib/
+/bin/
+/.shards/
+*.dwarf
+
+# VitePress
+docs/.vitepress/dist
+docs/.vitepress/cache
+node_modules/
+
+# npm
+package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+/coverage/
+*.log
