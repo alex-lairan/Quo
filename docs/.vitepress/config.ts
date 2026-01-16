@@ -70,6 +70,15 @@ export default defineConfig({
             { text: 'Adapters', link: '/guide/adapters' },
             { text: 'Logging', link: '/guide/logging' },
           ]
+        },
+        {
+          text: 'Infrastructure',
+          items: [
+            { text: 'Connection Pooling', link: '/guide/connection-pooling' },
+            { text: 'Multi-Database', link: '/guide/multi-database' },
+            { text: 'Query Caching', link: '/guide/caching' },
+            { text: 'Schema Introspection', link: '/guide/introspection' },
+          ]
         }
       ],
       '/api/': [
@@ -87,6 +96,16 @@ export default defineConfig({
             { text: 'Transaction', link: '/api/transaction' },
             { text: 'Logging', link: '/api/logging' },
             { text: 'Adapters', link: '/api/adapters' },
+          ]
+        },
+        {
+          text: 'Infrastructure',
+          items: [
+            { text: 'ConnectionPool', link: '/api/connection-pool' },
+            { text: 'Database', link: '/api/database' },
+            { text: 'Sharding', link: '/api/sharding' },
+            { text: 'Cache', link: '/api/cache' },
+            { text: 'Introspection', link: '/api/introspection' },
           ]
         }
       ],

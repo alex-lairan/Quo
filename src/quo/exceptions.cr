@@ -46,4 +46,47 @@ module Quo
   # Raised when adapter operations fail
   class AdapterError < Error
   end
+
+  # Raised when a database connection fails
+  class ConnectionError < Error
+    def initialize(message : String = "Database connection failed")
+      super(message)
+    end
+  end
+
+  # Raised when connection pool checkout times out
+  class PoolTimeoutError < Error
+    def initialize(timeout : Time::Span)
+      super("Connection checkout timed out after #{timeout}")
+    end
+
+    def initialize(message : String)
+      super(message)
+    end
+  end
+
+  # Raised when database routing fails (primary/replica)
+  class RoutingError < Error
+    def initialize(message : String = "Database routing failed")
+      super(message)
+    end
+  end
+
+  # Raised when sharding operations fail
+  class ShardingError < Error
+    def initialize(message : String = "Sharding operation failed")
+      super(message)
+    end
+
+    def initialize(shard_name : Symbol)
+      super("Shard '#{shard_name}' not found")
+    end
+  end
+
+  # Raised when cache operations fail
+  class CacheError < Error
+    def initialize(message : String = "Cache operation failed")
+      super(message)
+    end
+  end
 end

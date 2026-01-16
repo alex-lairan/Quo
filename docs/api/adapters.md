@@ -216,13 +216,85 @@ end
 
 ---
 
+## MySQL Adapter
+
+### Constructor
+
+```crystal
+Quo::Adapters::MySQL.new(connection : DB::Database?)
+```
+
+### SQL Generation
+
+| Feature | Output |
+|---------|--------|
+| Quote | `` `table`.`column` `` |
+| Placeholder | `?` |
+| ILIKE | `LOWER(col) LIKE LOWER(?)` |
+| RIGHT JOIN | Supported |
+| FULL JOIN | Error (not supported) |
+
+### Example
+
+```crystal
+require "mysql"
+
+DB.open "mysql://localhost/mydb" do |db|
+  adapter = Quo::Adapters::MySQL.new(db)
+
+  results = UsersRelation.new(adapter)
+    .where(users: { active: true })
+    .to_a
+end
+```
+
+---
+
+## Pooled Adapters
+
+Adapters with connection pooling, health checks, and statistics.
+
+### PooledPostgres
+
+```crystal
+pool = Quo::ConnectionPool.new("postgres://localhost/mydb", config)
+adapter = Quo::Adapters::PooledPostgres.new(pool)
+```
+
+### PooledMySQL
+
+```crystal
+pool = Quo::ConnectionPool.new("mysql://localhost/mydb", config)
+adapter = Quo::Adapters::PooledMySQL.new(pool)
+```
+
+### PooledSQLite
+
+```crystal
+pool = Quo::ConnectionPool.new("sqlite3:./mydb.db", config)
+adapter = Quo::Adapters::PooledSQLite.new(pool)
+```
+
+### Additional Features
+
+All pooled adapters include:
+
+- Automatic query logging via `Quo::Logging.instrument`
+- Connection checkout from pool
+- Health check integration
+- Pool statistics
+
+---
+
 ## Adapter Comparison
 
-| Feature | Postgres | SQLite | Test |
-|---------|----------|--------|------|
-| Connection | Required | Required | None |
-| Execution | Yes | Yes | No |
-| Placeholders | `$1` | `?` | `$1` |
-| ILIKE | Native | LOWER() | N/A |
-| RIGHT JOIN | Yes | No | N/A |
-| FULL JOIN | Yes | No | N/A |
+| Feature | Postgres | MySQL | SQLite | Test |
+|---------|----------|-------|--------|------|
+| Connection | Required | Required | Required | None |
+| Execution | Yes | Yes | Yes | No |
+| Placeholders | `$1` | `?` | `?` | `$1` |
+| Quote style | `"col"` | `` `col` `` | `"col"` | `"col"` |
+| ILIKE | Native | LOWER() | LOWER() | N/A |
+| RIGHT JOIN | Yes | Yes | No | N/A |
+| FULL JOIN | Yes | No | No | N/A |
+| Pooled version | Yes | Yes | Yes | No |

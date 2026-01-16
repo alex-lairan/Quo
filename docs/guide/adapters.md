@@ -4,11 +4,15 @@ Adapters handle database-specific SQL generation and execution.
 
 ## Available Adapters
 
-| Adapter | Database | Status |
-|---------|----------|--------|
-| `Quo::Adapters::Postgres` | PostgreSQL | Production |
-| `Quo::Adapters::SQLite` | SQLite | Production |
-| `Quo::Adapters::Test` | None | Testing |
+| Adapter | Database | Pooled | Status |
+|---------|----------|--------|--------|
+| `Quo::Adapters::Postgres` | PostgreSQL | No | Production |
+| `Quo::Adapters::PooledPostgres` | PostgreSQL | Yes | Production |
+| `Quo::Adapters::MySQL` | MySQL | No | Production |
+| `Quo::Adapters::PooledMySQL` | MySQL | Yes | Production |
+| `Quo::Adapters::SQLite` | SQLite | No | Production |
+| `Quo::Adapters::PooledSQLite` | SQLite | Yes | Production |
+| `Quo::Adapters::Test` | None | No | Testing |
 
 ## PostgreSQL Adapter
 
@@ -112,6 +116,133 @@ UsersRelation.new(sqlite_adapter)
 #    Use LEFT JOIN with reversed tables instead.
 ```
 
+## MySQL Adapter
+
+### Setup
+
+```crystal
+require "mysql"
+require "quo"
+
+DB.open "mysql://user:pass@localhost/mydb" do |db|
+  adapter = Quo::Adapters::MySQL.new(db)
+
+  results = UsersRelation.new(adapter).active.to_a
+end
+```
+
+### MySQL Differences
+
+| Feature | PostgreSQL | MySQL |
+|---------|------------|-------|
+| Placeholders | `$1, $2` | `?` |
+| Quote style | `"table"` | `` `table` `` |
+| ILIKE | Native | `LOWER(col) LIKE LOWER(?)` |
+| RIGHT JOIN | Yes | Yes |
+| FULL JOIN | Yes | Not supported |
+
+### Generated SQL Example
+
+```crystal
+UsersRelation.new(mysql_adapter)
+  .where(users: { active: true })
+  .where { |e| e[:users][:name].ilike("%john%") }
+  .limit(10)
+  .to_sql
+
+# SQL: SELECT `users`.* FROM `users`
+#      WHERE `users`.`active` = ?
+#      AND LOWER(`users`.`name`) LIKE LOWER(?)
+#      LIMIT ? OFFSET ?
+# Params: [true, "%john%", 10]
+```
+
+### MySQL Limitations
+
+```crystal
+# FULL JOIN raises error
+UsersRelation.new(mysql_adapter)
+  .full_join(:profiles)
+# => Quo::AdapterError: MySQL does not support FULL OUTER JOIN.
+#    Use UNION of LEFT and RIGHT JOINs instead.
+```
+
+## Pooled Adapters
+
+For production use with connection pooling, health checks, and statistics.
+
+### Why Use Pooled Adapters?
+
+**Non-pooled adapters** create a new connection for each query or reuse a single connection:
+- Simple setup for scripts and development
+- No connection management overhead
+- Risk of connection exhaustion under load
+- No automatic reconnection after failures
+
+**Pooled adapters** maintain a pool of reusable connections:
+- **Performance**: Avoid connection establishment overhead (TCP handshake, auth, etc.)
+- **Scalability**: Handle many concurrent requests with bounded connections
+- **Reliability**: Automatic reconnection and health checks detect stale connections
+- **Observability**: Built-in statistics for monitoring (utilization, timeouts, checkouts)
+- **Graceful degradation**: Queue requests when pool is exhausted rather than failing immediately
+
+**When to use pooled adapters:**
+- Web applications with concurrent requests
+- Background job processors
+- Any production workload with sustained database traffic
+
+**When non-pooled adapters are fine:**
+- One-off scripts
+- Development/testing
+- Low-traffic applications with infrequent queries
+
+### Setup with PooledPostgres
+
+```crystal
+require "pg"
+require "quo"
+
+# Configure pool
+pool_config = Quo::PoolConfig.new(
+  initial_size: 2,
+  max_size: 10,
+  checkout_timeout: 5.seconds
+)
+
+# Create connection pool
+pool = Quo::ConnectionPool.new("postgres://localhost/mydb", pool_config)
+
+# Create pooled adapter
+adapter = Quo::Adapters::PooledPostgres.new(pool)
+
+# Use like any other adapter
+results = UsersRelation.new(adapter).active.to_a
+
+# Check pool stats
+stats = pool.stats
+puts "Open connections: #{stats.open_connections}"
+puts "In use: #{stats.in_use}"
+
+# Close pool gracefully
+pool.close(timeout: 30.seconds)
+```
+
+### Available Pooled Adapters
+
+- `Quo::Adapters::PooledPostgres` - PostgreSQL with pooling
+- `Quo::Adapters::PooledMySQL` - MySQL with pooling
+- `Quo::Adapters::PooledSQLite` - SQLite with pooling
+
+### Benefits of Pooled Adapters
+
+- **Connection reuse** - Avoid connection overhead
+- **Automatic logging** - All queries logged via `Quo::Logging`
+- **Health checks** - Optional connection validation
+- **Statistics** - Monitor pool utilization
+- **Graceful shutdown** - Wait for in-flight queries
+
+See [Connection Pooling](/guide/connection-pooling) for detailed configuration.
+
 ## Test Adapter
 
 For unit testing without a database connection.
@@ -193,6 +324,9 @@ module MyApp
       when /^postgres/
         db = DB.open(ENV["DATABASE_URL"])
         Quo::Adapters::Postgres.new(db)
+      when /^mysql/
+        db = DB.open(ENV["DATABASE_URL"])
+        Quo::Adapters::MySQL.new(db)
       when /^sqlite/
         db = DB.open(ENV["DATABASE_URL"])
         Quo::Adapters::SQLite.new(db)
@@ -206,3 +340,14 @@ end
 # Usage
 results = UsersRelation.new(MyApp.adapter).active.to_a
 ```
+
+## Adapter Comparison
+
+| Feature | Postgres | MySQL | SQLite | Test |
+|---------|----------|-------|--------|------|
+| Placeholders | `$1` | `?` | `?` | `$1` |
+| Quote style | `"col"` | `` `col` `` | `"col"` | `"col"` |
+| ILIKE | Native | LOWER() | LOWER() | N/A |
+| RIGHT JOIN | Yes | Yes | No | N/A |
+| FULL JOIN | Yes | No | No | N/A |
+| Pooled version | Yes | Yes | Yes | No |
