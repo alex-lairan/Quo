@@ -16,8 +16,19 @@ module Quo
 
   # Raised when an invalid column is referenced
   class InvalidColumnError < SchemaError
+    def initialize(message : String)
+      super(message)
+    end
+
     def initialize(table : Symbol, column : Symbol)
       super("Column '#{column}' does not exist in table '#{table}'")
+    end
+  end
+
+  # Raised when a value type doesn't match the column type
+  class TypeError < SchemaError
+    def initialize(message : String)
+      super(message)
     end
   end
 

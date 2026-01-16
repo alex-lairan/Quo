@@ -18,19 +18,22 @@ module Quo
   #     end
   #   end
   abstract class Relation
-    # Class-level schema storage
-    class_getter schema_definition : Schema { Schema.new(:undefined) }
-    class_getter table : Symbol { :undefined }
-
     # Macro to define the schema for this relation
     macro schema(table_name, &block)
-      @@table = {{table_name}}
-      @@schema_definition = Quo::Schema.build({{table_name}}) do
+      @@table : Symbol = {{table_name}}
+      @@schema_definition : Quo::Schema = Quo::Schema.build({{table_name}}) do
         {{block.body}}
       end
 
+      # Register schema in the global registry for cross-table validation
+      Quo::SchemaRegistry.register(@@schema_definition)
+
       def self.table_name : Symbol
         {{table_name}}
+      end
+
+      def self.schema_definition : Quo::Schema
+        @@schema_definition
       end
     end
 
@@ -84,19 +87,34 @@ module Quo
       self.class.schema_definition
     end
 
-    # SELECT - specify columns
+    # SELECT - specify columns (with validation)
     def select(**columns) : self
+      # Validate all columns exist in their respective tables
+      columns.each do |table, cols|
+        cols.each do |col|
+          SchemaRegistry.validate_column!(table, col)
+        end
+      end
       with_query(@query.select(**columns))
     end
 
-    # WHERE with hash conditions
+    # WHERE with hash conditions (with validation and type checking)
     def where(**conditions) : self
+      # Validate columns and type check values
+      conditions.each do |table, hash|
+        hash.each do |column, value|
+          SchemaRegistry.validate_column_value!(table, column, value.as(DB::Any))
+        end
+      end
       with_query(@query.where(**conditions))
     end
 
-    # WHERE with expression block
+    # WHERE with expression block (with validation)
     def where(&block : ExpressionBuilder -> Expression) : self
-      with_query(@query.where(&block))
+      builder = ExpressionBuilder.new
+      expr = yield builder
+      validate_expression!(expr)
+      with_query(@query.copy_with(where_clauses: @query.where_clauses + [expr]))
     end
 
     # JOIN with explicit condition
@@ -147,8 +165,14 @@ module Quo
       join(association, type: JoinType::Full)
     end
 
-    # ORDER BY
+    # ORDER BY (with validation)
     def order(**columns) : self
+      # Validate all columns exist in their respective tables
+      columns.each do |table, hash|
+        hash.each do |column, _direction|
+          SchemaRegistry.validate_column!(table, column)
+        end
+      end
       with_query(@query.order(**columns))
     end
 
@@ -220,6 +244,37 @@ module Quo
     # Create a new instance with modified query
     protected def with_query(new_query : Query) : self
       self.class.new(@adapter, new_query)
+    end
+
+    # Validate an expression tree, checking all column references
+    private def validate_expression!(expr : Expression) : Nil
+      case expr
+      when ColumnRef
+        SchemaRegistry.validate_column!(expr.table, expr.column)
+      when Eq, NotEq, Gt, Gte, Lt, Lte
+        SchemaRegistry.validate_column_value!(expr.column.table, expr.column.column, expr.value)
+      when Like, ILike
+        SchemaRegistry.validate_column!(expr.column.table, expr.column.column)
+      when In
+        SchemaRegistry.validate_column!(expr.column.table, expr.column.column)
+        # Type check each value in the IN clause
+        expr.values.each do |val|
+          SchemaRegistry.validate_column_value!(expr.column.table, expr.column.column, val)
+        end
+      when Between
+        SchemaRegistry.validate_column!(expr.column.table, expr.column.column)
+        SchemaRegistry.validate_column_value!(expr.column.table, expr.column.column, expr.min)
+        SchemaRegistry.validate_column_value!(expr.column.table, expr.column.column, expr.max)
+      when IsNull, IsNotNull
+        SchemaRegistry.validate_column!(expr.column.table, expr.column.column)
+      when And, Or
+        validate_expression!(expr.left)
+        validate_expression!(expr.right)
+      when Not
+        validate_expression!(expr.expression)
+      when Raw
+        # Raw SQL is not validated
+      end
     end
   end
 end

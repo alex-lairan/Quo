@@ -1,5 +1,6 @@
 require "./schema/column"
 require "./schema/association"
+require "./schema/registry"
 
 module Quo
   # Schema definition for a database table
