@@ -28,6 +28,7 @@ module Quo
   VERSION = "0.1.0"
 end
 
+require "./quo/value"
 require "./quo/exceptions"
 require "./quo/column_ref"
 require "./quo/subquery"

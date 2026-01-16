@@ -57,8 +57,8 @@ order_stats = Quo::Query.new(:orders, adapter)
   .to_a
 
 order_stats.each do |row|
-  total = row["total_spent"].as(Int64 | Float64)
-  avg = row["avg_order"].as(Float64)
+  total = row["total_spent"].as(Int64 | PG::Numeric)
+  avg = row["avg_order"].as(PG::Numeric)
   puts "  User #{row["user_id"]}: #{row["order_count"]} orders, " \
        "total: $#{total.to_f / 100}, avg: $#{avg.to_f / 100}"
 end
@@ -74,7 +74,7 @@ post_stats = Quo::Query.new(:posts, adapter)
 
 puts "  Total posts: #{post_stats["total_posts"]}"
 puts "  Total views: #{post_stats["total_views"]}"
-puts "  Avg views: #{post_stats["avg_views"].as(Float64).round(2)}"
+puts "  Avg views: #{post_stats["avg_views"].as(PG::Numeric).to_f.round(2)}"
 puts "  Max views: #{post_stats["max_views"]}"
 
 # =============================================================================
@@ -207,66 +207,70 @@ top_spenders = Quo::Query.new(:top_spenders, adapter)
   .to_a
 
 top_spenders.each do |row|
-  spent = row["total_spent"].as(Int64 | Float64).to_f / 100
+  spent = row["total_spent"].as(Int64 | PG::Numeric).to_f / 100
   puts "  User #{row["user_id"]}: $#{spent}"
 end
 
 # Multiple CTEs: High-value customers with their order details
 puts "\n--- High-Value Customer Analysis (Multiple CTEs) ---"
-customer_totals = Quo::Query.new(:orders, adapter)
+
+# CTE: Calculate lifetime value and order count per user
+customer_totals_query = Quo::Query.new(:orders, adapter)
   .select(orders: [:user_id])
   .select_sum(:orders, :total_cents, as: :lifetime_value)
   .select_count(as: :order_count)
   .group(orders: [:user_id])
 
-high_value_ids = Quo::Query.new(:customer_totals, adapter)
-  .select(customer_totals: [:user_id])
+# Main query: Join CTE with users, filter high-value customers
+high_value_customers = Quo::Query.new(:customer_totals, adapter)
+  .with_cte(:customer_totals, customer_totals_query)
+  .select(users: [:name])
+  .select(customer_totals: [:lifetime_value, :order_count])
+  .join(:users, on: {users: :id, eq: {customer_totals: :user_id}})
   .where { |e| e[:customer_totals][:lifetime_value] >= 100000 }
+  .order(customer_totals: {lifetime_value: :desc})
+  .to_a
 
-# Execute as separate queries for demo (CTEs work best with single query)
-sql = <<-SQL
-  WITH customer_totals AS (
-    SELECT "orders"."user_id", SUM("orders"."total_cents") AS lifetime_value, COUNT(*) AS order_count
-    FROM "orders"
-    GROUP BY "orders"."user_id"
-  )
-  SELECT u.name, ct.lifetime_value, ct.order_count
-  FROM customer_totals ct
-  JOIN users u ON u.id = ct.user_id
-  WHERE ct.lifetime_value >= 100000
-  ORDER BY ct.lifetime_value DESC
-SQL
-
-results = adapter.execute(sql, [] of DB::Any)
-results.each do |row|
-  value = row["lifetime_value"].as(Int64 | Float64).to_f / 100
+high_value_customers.each do |row|
+  value = row["lifetime_value"].as(Int64 | PG::Numeric).to_f / 100
   puts "  #{row["name"]}: $#{value} (#{row["order_count"]} orders)"
 end
 
-# Recursive CTE: Category hierarchy
-puts "\n--- Category Hierarchy (Recursive CTE) ---"
-recursive_sql = <<-SQL
-  WITH RECURSIVE category_tree AS (
-    -- Base case: top-level categories
-    SELECT id, name, parent_id, 0 AS depth, name::text AS path
-    FROM categories
-    WHERE parent_id IS NULL
+# Recursive CTE: Category hierarchy using the builder
+puts "\n--- Category Hierarchy (Recursive CTE with Builder) ---"
 
-    UNION ALL
+# Base case: top-level categories (parent_id IS NULL)
+base_query = Quo::Query.new(:categories, adapter)
+  .select(categories: [:id, :name, :parent_id])
+  .where { |e| e[:categories][:parent_id].is_null }
 
-    -- Recursive case: child categories
-    SELECT c.id, c.name, c.parent_id, ct.depth + 1, ct.path || ' > ' || c.name
-    FROM categories c
-    JOIN category_tree ct ON c.parent_id = ct.id
-  )
-  SELECT * FROM category_tree ORDER BY path
-SQL
+# Recursive case: child categories joined to the CTE
+# Note: We reference :category_tree as the table since it's the CTE name
+recursive_query = Quo::Query.new(:categories, adapter)
+  .select(categories: [:id, :name, :parent_id])
+  .join(:category_tree, on: {categories: :parent_id, eq: {category_tree: :id}})
 
-categories = adapter.execute(recursive_sql, [] of DB::Any)
-categories.each do |cat|
-  indent = "  " * (cat["depth"].as(Int32 | Int64).to_i + 1)
-  puts "#{indent}#{cat["name"]}"
+# Main query: select from the CTE, ordered by name for hierarchy display
+category_hierarchy = Quo::Query.new(:category_tree, adapter)
+  .with_recursive_cte(:category_tree, base: base_query, recursive: recursive_query)
+  .select(category_tree: [:id, :name, :parent_id])
+  .to_a
+
+# Build a tree structure for display
+def print_category_tree(categories : Quo::ResultSet, parent_id : Int64?, depth : Int32 = 0)
+  categories.each do |cat|
+    cat_parent = cat["parent_id"]
+    cat_parent_id = cat_parent.nil? ? nil : cat_parent.as(Int64)
+
+    if cat_parent_id == parent_id
+      indent = "  " * (depth + 1)
+      puts "#{indent}#{cat["name"]}"
+      print_category_tree(categories, cat["id"].as(Int64), depth + 1)
+    end
+  end
 end
+
+print_category_tree(category_hierarchy, nil)
 
 # =============================================================================
 # 5. TRANSACTIONS
@@ -423,58 +427,70 @@ puts "=" * 60
 
 puts "\n--- Dashboard: Active Premium Users with Order Summary ---"
 
-# This combines joins, aggregations, and conditions
-dashboard_sql = <<-SQL
-  WITH user_orders AS (
-    SELECT
-      user_id,
-      COUNT(*) AS order_count,
-      SUM(total_cents) AS total_spent,
-      MAX(created_at) AS last_order
-    FROM orders
-    WHERE status = 'completed'
-    GROUP BY user_id
-  ),
-  user_posts AS (
-    SELECT
-      user_id,
-      COUNT(*) AS post_count,
-      SUM(view_count) AS total_views
-    FROM posts
-    WHERE status = 'published'
-    GROUP BY user_id
-  )
-  SELECT
-    u.id,
-    u.name,
-    u.email,
-    u.role,
-    u.tier,
-    COALESCE(uo.order_count, 0) AS orders,
-    COALESCE(uo.total_spent, 0) AS spent,
-    COALESCE(up.post_count, 0) AS posts,
-    COALESCE(up.total_views, 0) AS views
-  FROM users u
-  LEFT JOIN user_orders uo ON uo.user_id = u.id
-  LEFT JOIN user_posts up ON up.user_id = u.id
-  WHERE u.active = true AND u.tier = 'premium'
-  ORDER BY uo.total_spent DESC NULLS LAST
-SQL
+# CTE 1: Aggregate orders per user
+user_orders_query = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+  .select_count(as: :order_count)
+  .select_sum(:orders, :total_cents, as: :total_spent)
+  .select_max(:orders, :created_at, as: :last_order)
+  .where { |e| e[:orders][:status] == "completed" }
+  .group(orders: [:user_id])
 
-dashboard = adapter.execute(dashboard_sql, [] of DB::Any)
+# CTE 2: Aggregate posts per user
+user_posts_query = Quo::Query.new(:posts, adapter)
+  .select(posts: [:user_id])
+  .select_count(as: :post_count)
+  .select_sum(:posts, :view_count, as: :total_views)
+  .where { |e| e[:posts][:status] == "published" }
+  .group(posts: [:user_id])
+
+# Main query: Join users with both CTEs
+dashboard = Quo::Query.new(:users, adapter)
+  .with_cte(:user_orders, user_orders_query)
+  .with_cte(:user_posts, user_posts_query)
+  .select(users: [:id, :name, :email, :role, :tier])
+  .select(user_orders: [:order_count, :total_spent])
+  .select(user_posts: [:post_count, :total_views])
+  .left_join(:user_orders, on: {user_orders: :user_id, eq: {users: :id}})
+  .left_join(:user_posts, on: {user_posts: :user_id, eq: {users: :id}})
+  .where { |e| e[:users][:active] == true }
+  .where { |e| e[:users][:tier] == "premium" }
+  .order(user_orders: {total_spent: :desc})
+  .to_a
+
 puts "  " + "-" * 70
 puts "  | %-20s | %-8s | %6s | %10s | %5s | %6s |" % ["Name", "Role", "Orders", "Spent", "Posts", "Views"]
 puts "  " + "-" * 70
 
+# Sort by total_spent descending, treating nil as 0 (like NULLS LAST)
+dashboard.sort_by! { |row|
+  val = row["total_spent"]
+  case val
+  when PG::Numeric then -val.to_f
+  when Int64       then -val.to_f
+  else             0.0
+  end
+}
+
 dashboard.each do |row|
-  spent = (row["spent"].as(Int64 | Float64 | Nil) || 0).to_f / 100
+  # Handle NULL values from LEFT JOIN (like COALESCE)
+  orders = row["order_count"]? || 0
+  spent_val = row["total_spent"]
+  spent = case spent_val
+          when PG::Numeric then spent_val.to_f / 100
+          when Int64       then spent_val.to_f / 100
+          else             0.0
+          end
+  posts = row["post_count"]? || 0
+  views = row["total_views"]? || 0
+
   puts "  | %-20s | %-8s | %6s | $%9.2f | %5s | %6s |" % [
     row["name"],
     row["role"],
-    row["orders"],
+    orders,
     spent,
-    row["posts"],
-    row["views"]
+    posts,
+    views
   ]
 end
 puts "  " + "-" * 70

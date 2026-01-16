@@ -79,7 +79,8 @@ module Quo
     end
 
     # Execute the update and return the updated rows (requires RETURNING)
-    def execute_returning : Array(Hash(String, DB::Any))
+    # Returns Quo::ResultSet with rich types preserved
+    def execute_returning : Quo::ResultSet
       raise QueryError.new("RETURNING clause required for execute_returning") if @returning_columns.empty?
       sql, params = to_sql
       @adapter.execute(sql, params)

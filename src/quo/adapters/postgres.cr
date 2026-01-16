@@ -26,10 +26,24 @@ module Quo
             str << (has_recursive ? "WITH RECURSIVE " : "WITH ")
 
             cte_parts = query.cte_clauses.map do |cte|
-              cte_sql, cte_params = compile_for_set_operation(cte.query, param_index)
-              params.concat(cte_params)
-              param_index += cte_params.size
-              "#{quote_identifier(cte.name)} AS (#{cte_sql})"
+              if cte.two_part_recursive?
+                # Recursive CTE with base case UNION ALL recursive case
+                base_sql, base_params = compile_for_set_operation(cte.base_query.not_nil!, param_index)
+                params.concat(base_params)
+                param_index += base_params.size
+
+                recursive_sql, recursive_params = compile_for_set_operation(cte.recursive_query.not_nil!, param_index)
+                params.concat(recursive_params)
+                param_index += recursive_params.size
+
+                "#{quote_identifier(cte.name)} AS (#{base_sql} UNION ALL #{recursive_sql})"
+              else
+                # Standard CTE
+                cte_sql, cte_params = compile_for_set_operation(cte.query.not_nil!, param_index)
+                params.concat(cte_params)
+                param_index += cte_params.size
+                "#{quote_identifier(cte.name)} AS (#{cte_sql})"
+              end
             end
             str << cte_parts.join(", ")
             str << " "
@@ -219,43 +233,23 @@ module Quo
       end
 
       # Execute query and return results as hash array
-      def execute(sql : String, params : Array(DB::Any)) : Array(Hash(String, DB::Any))
+      # Execute query and return results with rich PostgreSQL types preserved
+      def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
         connection = @connection || raise AdapterError.new("No database connection")
-        results = [] of Hash(String, DB::Any)
+        results = [] of Quo::Row
 
         connection.query(sql, args: params) do |rs|
           rs.each do
-            row = {} of String => DB::Any
+            row = {} of String => Quo::Value
             rs.column_count.times do |i|
               col_name = rs.column_name(i)
-              value = rs.read
-              # Cast PostgreSQL native types to DB::Any compatible types
-              row[col_name] = convert_pg_value(value)
+              row[col_name] = rs.read
             end
             results << row
           end
         end
 
         results
-      end
-
-      # Convert PG-specific types to DB::Any compatible types
-      private def convert_pg_value(value) : DB::Any
-        case value
-        when Bool, Int32, Int64, Float32, Float64, String, Time, Nil
-          value.as(DB::Any)
-        when Slice(UInt8)
-          value.as(DB::Any)
-        when Int16
-          value.to_i64.as(DB::Any)
-        when UInt32, UInt64
-          value.to_i64.as(DB::Any)
-        when PG::Numeric
-          value.to_f64.as(DB::Any)
-        else
-          # For other PG-specific types (UUID, JSON, Geo, etc.), convert to string
-          value.to_s.as(DB::Any)
-        end
       end
 
       # Execute query and map to type T

@@ -278,10 +278,21 @@ module Quo
       copy_with(cte_clauses: @cte_clauses + [cte])
     end
 
-    # WITH RECURSIVE - add a recursive CTE
+    # WITH RECURSIVE - add a recursive CTE (simple form)
     # Example: .with_recursive_cte(:tree, recursive_query)
     def with_recursive_cte(name : Symbol, cte_query : Query) : Query
       with_cte(name, cte_query, recursive: true)
+    end
+
+    # WITH RECURSIVE - add a recursive CTE with base case and recursive case
+    # This creates: WITH RECURSIVE name AS (base_query UNION ALL recursive_query)
+    # Example:
+    #   base = Query.new(:categories, adapter).where(categories: {parent_id: nil})
+    #   recursive = Query.new(:categories, adapter).join(:tree, on: {...})
+    #   query.with_recursive_cte(:tree, base: base, recursive: recursive)
+    def with_recursive_cte(name : Symbol, *, base base_query : Query, recursive recursive_query : Query) : Query
+      new_cte = CTE.new(name, base: base_query, recursive: recursive_query)
+      copy_with(cte_clauses: @cte_clauses + [new_cte])
     end
 
     # Merge another query's conditions into this one
@@ -313,7 +324,9 @@ module Quo
     end
 
     # Execute query and return array of hashes
-    def to_a : Array(Hash(String, DB::Any))
+    # Execute query and return results
+    # Returns Quo::ResultSet with rich types preserved (UUID, PG::Numeric, etc.)
+    def to_a : Quo::ResultSet
       sql, params = to_sql
       @adapter.execute(sql, params)
     end
@@ -325,7 +338,8 @@ module Quo
     end
 
     # Get first result or nil
-    def first : Hash(String, DB::Any)?
+    # Returns Quo::Row with rich types preserved
+    def first : Quo::Row?
       limited = limit(1)
       results = limited.to_a
       results.first?
@@ -339,7 +353,8 @@ module Quo
     end
 
     # Get first result or raise RecordNotFound
-    def first! : Hash(String, DB::Any)
+    # Returns Quo::Row with rich types preserved
+    def first! : Quo::Row
       first || raise RecordNotFound.new(@table)
     end
 

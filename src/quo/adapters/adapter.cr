@@ -15,7 +15,8 @@ module Quo
       abstract def placeholder(index : Int32) : String
 
       # Execute a query and return results as array of hashes
-      abstract def execute(sql : String, params : Array(DB::Any)) : Array(Hash(String, DB::Any))
+      # Returns Quo::ResultSet which preserves rich types (UUID, PG::Numeric, etc.)
+      abstract def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
 
       # Execute a query and map results to type T
       # Note: This needs to be implemented as a non-abstract method with generics

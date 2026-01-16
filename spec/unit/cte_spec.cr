@@ -71,6 +71,52 @@ describe "CTEs (Common Table Expressions)" do
       sql, _ = query.to_sql
       sql.should contain("WITH RECURSIVE")
     end
+
+    it "generates two-part recursive CTE with base and recursive queries" do
+      # Base case: root categories (no parent)
+      base_query = Quo::Query.new(:categories, adapter)
+        .select(categories: [:id, :name, :parent_id])
+        .where(categories: {parent_id: nil})
+
+      # Recursive case: children joined to CTE
+      recursive_query = Quo::Query.new(:categories, adapter)
+        .select(categories: [:id, :name, :parent_id])
+        .join(:category_tree, on: {categories: :parent_id, eq: {category_tree: :id}})
+
+      query = Quo::Query.new(:category_tree, adapter)
+        .with_recursive_cte(:category_tree, base: base_query, recursive: recursive_query)
+        .select(category_tree: [:id, :name])
+
+      sql, params = query.to_sql
+      sql.should contain("WITH RECURSIVE \"category_tree\" AS")
+      sql.should contain("UNION ALL")
+      sql.should contain("INNER JOIN \"category_tree\"")
+      params.should eq([nil])
+    end
+
+    it "handles two-part recursive CTE with multiple parameters" do
+      base_query = Quo::Query.new(:nodes, adapter)
+        .select(nodes: [:id, :value])
+        .where(nodes: {level: 0, active: true})
+
+      recursive_query = Quo::Query.new(:nodes, adapter)
+        .select(nodes: [:id, :value])
+        .join(:tree, on: {nodes: :parent_id, eq: {tree: :id}})
+        .where(nodes: {active: true})
+
+      query = Quo::Query.new(:tree, adapter)
+        .with_recursive_cte(:tree, base: base_query, recursive: recursive_query)
+        .select(tree: [:id, :value])
+        .where(tree: {value: "test"})
+
+      sql, params = query.to_sql
+      sql.should contain("WITH RECURSIVE \"tree\" AS")
+      sql.should contain("UNION ALL")
+      # Base params: level=0, active=true
+      # Recursive params: active=true
+      # Main query params: value="test"
+      params.should eq([0, true, true, "test"])
+    end
   end
 
   describe "CTE with complex queries" do

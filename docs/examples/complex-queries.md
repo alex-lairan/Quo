@@ -399,25 +399,68 @@ vip_users = Quo::Query.new(:top_spenders, adapter)
 ### Multiple CTEs
 
 ```crystal
-# Recent orders CTE
-recent_orders = Quo::Query.new(:orders, adapter)
-  .select(orders: [:id, :user_id, :amount_cents])
-  .where { |e| e[:orders][:created_at] >= 30.days.ago }
+# CTE 1: Aggregate orders per user
+user_orders_query = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+  .select_count(as: :order_count)
+  .select_sum(:orders, :total_cents, as: :total_spent)
+  .group(orders: [:user_id])
 
-# VIP users CTE
-vip_users = Quo::Query.new(:users, adapter)
-  .select(users: [:id])
-  .where(users: { tier: "vip" })
+# CTE 2: Aggregate posts per user
+user_posts_query = Quo::Query.new(:posts, adapter)
+  .select(posts: [:user_id])
+  .select_count(as: :post_count)
+  .select_sum(:posts, :view_count, as: :total_views)
+  .group(posts: [:user_id])
 
-# Query using both CTEs
-vip_recent_orders = Quo::Query.new(:recent_orders, adapter)
-  .with_cte(:recent_orders, recent_orders)
-  .with_cte(:vip_users, vip_users)
-  .select(recent_orders: [:id, :amount_cents])
-  .where { |e| e[:recent_orders][:user_id].in(
-    Quo::Query.new(:vip_users, adapter).select(vip_users: [:id])
-  )}
+# Main query: Join users with both CTEs
+dashboard = Quo::Query.new(:users, adapter)
+  .with_cte(:user_orders, user_orders_query)
+  .with_cte(:user_posts, user_posts_query)
+  .select(users: [:id, :name])
+  .select(user_orders: [:order_count, :total_spent])
+  .select(user_posts: [:post_count, :total_views])
+  .left_join(:user_orders, on: {user_orders: :user_id, eq: {users: :id}})
+  .left_join(:user_posts, on: {user_posts: :user_id, eq: {users: :id}})
+  .where(users: { active: true })
   .to_a
+```
+
+### Recursive CTE
+
+For hierarchical data like category trees or org charts:
+
+```crystal
+# Base case: top-level categories (no parent)
+base_query = Quo::Query.new(:categories, adapter)
+  .select(categories: [:id, :name, :parent_id])
+  .where { |e| e[:categories][:parent_id].is_null }
+
+# Recursive case: children joined to the CTE
+recursive_query = Quo::Query.new(:categories, adapter)
+  .select(categories: [:id, :name, :parent_id])
+  .join(:category_tree, on: {categories: :parent_id, eq: {category_tree: :id}})
+
+# Main query using the recursive CTE
+category_hierarchy = Quo::Query.new(:category_tree, adapter)
+  .with_recursive_cte(:category_tree, base: base_query, recursive: recursive_query)
+  .select(category_tree: [:id, :name, :parent_id])
+  .to_a
+```
+
+**Generated SQL:**
+```sql
+WITH RECURSIVE "category_tree" AS (
+  SELECT "categories"."id", "categories"."name", "categories"."parent_id"
+  FROM "categories"
+  WHERE "categories"."parent_id" IS NULL
+  UNION ALL
+  SELECT "categories"."id", "categories"."name", "categories"."parent_id"
+  FROM "categories"
+  INNER JOIN "category_tree" ON "categories"."parent_id" = "category_tree"."id"
+)
+SELECT "category_tree"."id", "category_tree"."name", "category_tree"."parent_id"
+FROM "category_tree"
 ```
 
 ## Transactions

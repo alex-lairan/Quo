@@ -378,12 +378,42 @@ WITH "active_users" AS (SELECT ...) SELECT ... FROM "active_users"
 
 ```crystal
 def with_recursive_cte(name : Symbol, query : Query) : Query
+def with_recursive_cte(name : Symbol, *, base : Query, recursive : Query) : Query
 ```
 
 Add a recursive CTE (WITH RECURSIVE clause).
 
+**Simple form** (single query that references itself):
+
 ```crystal
 .with_recursive_cte(:tree, category_tree_query)
+```
+
+**Two-part form** (base case + recursive case with UNION ALL):
+
+```crystal
+# Base case: root nodes
+base_query = Quo::Query.new(:categories, adapter)
+  .select(categories: [:id, :name, :parent_id])
+  .where { |e| e[:categories][:parent_id].is_null }
+
+# Recursive case: children joining to CTE
+recursive_query = Quo::Query.new(:categories, adapter)
+  .select(categories: [:id, :name, :parent_id])
+  .join(:tree, on: {categories: :parent_id, eq: {tree: :id}})
+
+# Combined recursive CTE
+.with_recursive_cte(:tree, base: base_query, recursive: recursive_query)
+```
+
+**Generated SQL:**
+```sql
+WITH RECURSIVE "tree" AS (
+  SELECT ... FROM "categories" WHERE "parent_id" IS NULL
+  UNION ALL
+  SELECT ... FROM "categories" INNER JOIN "tree" ON ...
+)
+SELECT ... FROM "tree"
 ```
 
 ---

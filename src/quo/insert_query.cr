@@ -79,14 +79,16 @@ module Quo
     end
 
     # Execute the insert and return the inserted rows (requires RETURNING)
-    def execute_returning : Array(Hash(String, DB::Any))
+    # Returns Quo::ResultSet with rich types preserved
+    def execute_returning : Quo::ResultSet
       raise QueryError.new("RETURNING clause required for execute_returning") if @returning_columns.empty?
       sql, params = to_sql
       @adapter.execute(sql, params)
     end
 
     # Execute and return first row (useful with RETURNING for single insert)
-    def execute_returning_one : Hash(String, DB::Any)?
+    # Returns Quo::Row with rich types preserved
+    def execute_returning_one : Quo::Row?
       results = execute_returning
       results.first?
     end
