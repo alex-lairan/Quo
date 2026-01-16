@@ -92,13 +92,6 @@ def print_section(title : String)
   puts "=" * 80
 end
 
-def print_query(name : String, sql : String, params : Array(DB::Any))
-  puts "\n#{name}"
-  puts "-" * 60
-  puts "SQL: #{sql}"
-  puts "Params: #{params.inspect}"
-end
-
 def print_results(results : Array(Hash(String, DB::Any)))
   if results.empty?
     puts "  (no results)"
@@ -203,106 +196,121 @@ DB.open "sqlite3::memory:" do |db|
   puts "  5 contracts inseres"
 
   # ---------------------------------------------------------------------------
-  # QUERIES SIMPLES
+  # QUERIES SIMPLES - Direct .to_a
   # ---------------------------------------------------------------------------
-  print_section("3. Queries simples")
+  print_section("3. Queries simples (.to_a direct)")
 
   # 3.1 - Tous les users actifs
   puts "\n3.1 Tous les users actifs:"
-  sql, params = UsersRelation.new(adapter)
+  results = UsersRelation.new(adapter)
     .select(users: [:id, :name, :email, :role])
     .active
-    .to_sql
-  print_query("UsersRelation.active", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
   # 3.2 - Users admin
   puts "\n3.2 Users admin:"
-  sql, params = UsersRelation.new(adapter)
+  results = UsersRelation.new(adapter)
     .select(users: [:id, :name, :role])
     .admins
-    .to_sql
-  print_query("UsersRelation.admins", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
   # 3.3 - Companies en France
   puts "\n3.3 Companies en France:"
-  sql, params = CompaniesRelation.new(adapter)
+  results = CompaniesRelation.new(adapter)
     .select(companies: [:id, :name, :country])
     .in_country("France")
-    .to_sql
-  print_query("CompaniesRelation.in_country('France')", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
+
+  # ---------------------------------------------------------------------------
+  # TERMINAL METHODS: first, first!, count, exists?
+  # ---------------------------------------------------------------------------
+  print_section("4. Terminal methods")
+
+  # 4.1 - first (returns nil if not found)
+  puts "\n4.1 Premier admin:"
+  user = UsersRelation.new(adapter)
+    .select(users: [:id, :name])
+    .admins
+    .first
+  puts "  #{user}"
+
+  # 4.2 - first! (raises if not found)
+  puts "\n4.2 Premier contract actif (first!):"
+  contract = ContractsRelation.new(adapter)
+    .select(contracts: [:id, :reference])
+    .active
+    .first!
+  puts "  #{contract}"
+
+  # 4.3 - count
+  puts "\n4.3 Nombre de contracts actifs:"
+  count = ContractsRelation.new(adapter).active.count
+  puts "  Count: #{count}"
+
+  # 4.4 - exists?
+  puts "\n4.4 Existe-t-il des users admin?"
+  exists = UsersRelation.new(adapter).admins.exists?
+  puts "  Exists: #{exists}"
 
   # ---------------------------------------------------------------------------
   # QUERIES AVEC EXPRESSIONS
   # ---------------------------------------------------------------------------
-  print_section("4. Queries avec expressions")
+  print_section("5. Queries avec expressions")
 
-  # 4.1 - Contracts avec montant >= 50000
-  puts "\n4.1 Contracts high value (>= 500 EUR):"
-  sql, params = ContractsRelation.new(adapter)
+  # 5.1 - Contracts avec montant >= 50000
+  puts "\n5.1 Contracts high value (>= 500 EUR):"
+  results = ContractsRelation.new(adapter)
     .select(contracts: [:id, :reference, :amount_cents, :status])
     .high_value(50000_i64)
-    .to_sql
-  print_query("ContractsRelation.high_value(50000)", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
-  # 4.2 - Contracts actifs OU pending
-  puts "\n4.2 Contracts actifs OU pending:"
-  sql, params = ContractsRelation.new(adapter)
+  # 5.2 - Contracts actifs OU pending
+  puts "\n5.2 Contracts actifs OU pending:"
+  results = ContractsRelation.new(adapter)
     .select(contracts: [:id, :reference, :status])
     .where { |e|
       (e[:contracts][:status] == "active") | (e[:contracts][:status] == "pending")
     }
-    .to_sql
-  print_query("where status = 'active' OR status = 'pending'", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
-  # 4.3 - Contracts avec montant entre 20000 et 80000
-  puts "\n4.3 Contracts avec montant entre 200 et 800 EUR:"
-  sql, params = ContractsRelation.new(adapter)
+  # 5.3 - Contracts avec montant entre 20000 et 80000
+  puts "\n5.3 Contracts avec montant entre 200 et 800 EUR:"
+  results = ContractsRelation.new(adapter)
     .select(contracts: [:id, :reference, :amount_cents])
     .where { |e| e[:contracts][:amount_cents].between(20000_i64, 80000_i64) }
-    .to_sql
-  print_query("where amount_cents BETWEEN 20000 AND 80000", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
-  # 4.4 - Contracts avec status IN (...)
-  puts "\n4.4 Contracts avec status IN ('active', 'pending'):"
-  sql, params = ContractsRelation.new(adapter)
+  # 5.4 - IN clause
+  puts "\n5.4 Contracts avec status IN ('active', 'pending'):"
+  results = ContractsRelation.new(adapter)
     .select(contracts: [:id, :reference, :status])
     .where { |e| e[:contracts][:status].in(["active", "pending"]) }
-    .to_sql
-  print_query("where status IN ('active', 'pending')", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
   # ---------------------------------------------------------------------------
   # QUERIES AVEC JOINS (via associations)
   # ---------------------------------------------------------------------------
-  print_section("5. Queries avec JOINs (associations)")
+  print_section("6. Queries avec JOINs (associations)")
 
-  # 5.1 - Contracts avec user (INNER JOIN)
-  puts "\n5.1 Contracts avec info user:"
-  sql, params = ContractsRelation.new(adapter)
+  # 6.1 - Contracts avec user (INNER JOIN)
+  puts "\n6.1 Contracts actifs avec info user:"
+  results = ContractsRelation.new(adapter)
     .select(contracts: [:id, :reference, :status], users: [:name, :email])
-    .join(:user)  # Utilise l'association belongs_to
+    .join(:user)
     .active
-    .to_sql
-  print_query("ContractsRelation.join(:user).active", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
-  # 5.2 - Contracts avec user ET company
-  puts "\n5.2 Contracts avec user ET company:"
-  sql, params = ContractsRelation.new(adapter)
+  # 6.2 - Contracts avec user ET company
+  puts "\n6.2 Tous les contracts avec user ET company:"
+  results = ContractsRelation.new(adapter)
     .select(
       contracts: [:reference, :amount_cents],
       users: [:name],
@@ -310,29 +318,24 @@ DB.open "sqlite3::memory:" do |db|
     )
     .join(:user)
     .join(:company)
-    .to_sql
-  print_query("ContractsRelation.join(:user).join(:company)", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
-  # 5.3 - Contracts avec LEFT JOIN
-  puts "\n5.3 Tous les contracts (LEFT JOIN user):"
-  sql, params = ContractsRelation.new(adapter)
+  # 6.3 - LEFT JOIN
+  puts "\n6.3 Tous les contracts (LEFT JOIN user):"
+  results = ContractsRelation.new(adapter)
     .select(contracts: [:id, :reference], users: [:name])
     .left_join(:user)
-    .to_sql
-  print_query("ContractsRelation.left_join(:user)", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
   # ---------------------------------------------------------------------------
-  # QUERIES COMPLEXES
+  # QUERY COMPLEXE
   # ---------------------------------------------------------------------------
-  print_section("6. Queries complexes")
+  print_section("7. Query complexe - Dashboard")
 
-  # 6.1 - Dashboard: contracts actifs high value avec user et company
-  puts "\n6.1 Dashboard - Contracts actifs high value:"
-  sql, params = ContractsRelation.new(adapter)
+  puts "\nContracts actifs high value avec user et company actifs:"
+  results = ContractsRelation.new(adapter)
     .select(
       contracts: [:reference, :status, :amount_cents],
       users: [:name, :role],
@@ -346,88 +349,72 @@ DB.open "sqlite3::memory:" do |db|
     .where(companies: {active: true})
     .order(contracts: {amount_cents: :desc})
     .limit(10)
-    .to_sql
-
-  print_query("Complex dashboard query", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
-  # 6.2 - Count des contracts actifs
-  puts "\n6.2 Count des contracts actifs:"
-  sql, params = ContractsRelation.new(adapter)
-    .active
-    .count_sql
-  print_query("ContractsRelation.active.count_sql", sql, params)
-  count = db.query_one(sql, args: params, as: Int64)
-  puts "  Count: #{count}"
+  # ---------------------------------------------------------------------------
+  # ILIKE (case-insensitive)
+  # ---------------------------------------------------------------------------
+  print_section("8. Recherche case-insensitive (ILIKE)")
 
-  # 6.3 - ILIKE (case-insensitive search)
-  puts "\n6.3 Recherche case-insensitive (ILIKE -> LOWER):"
-  sql, params = UsersRelation.new(adapter)
+  puts "\nRecherche '%martin%' (case-insensitive):"
+  results = UsersRelation.new(adapter)
     .select(users: [:id, :name, :email])
     .where { |e| e[:users][:name].ilike("%martin%") }
-    .to_sql
-  print_query("where name ILIKE '%martin%'", sql, params)
-  results = adapter.execute(sql, params)
+    .to_a
   print_results(results)
 
   # ---------------------------------------------------------------------------
-  # DIFFERENCES SQLITE VS POSTGRES
+  # CHAINING EXAMPLE
   # ---------------------------------------------------------------------------
-  print_section("7. Differences SQLite vs Postgres")
+  print_section("9. Chaining fluide")
 
-  puts <<-INFO
+  puts <<-CODE
 
-  SQLite Adapter specifics:
+  # Le code devient tres lisible:
 
-  1. Placeholders: ? (vs $1, $2 pour Postgres)
-     Exemple: WHERE status = ? AND amount > ?
+  results = ContractsRelation.new(adapter)
+    .select(contracts: [:reference], users: [:name])
+    .join(:user)
+    .active
+    .high_value(50000_i64)
+    .order(contracts: {amount_cents: :desc})
+    .limit(5)
+    .to_a
 
-  2. ILIKE: Converti en LOWER(col) LIKE LOWER(?)
-     SQLite n'a pas ILIKE nativement
+  CODE
 
-  3. RIGHT JOIN / FULL JOIN: Non supportes
-     SQLite ne supporte pas ces types de JOIN
-     -> Utiliser LEFT JOIN avec tables inversees
-
-  4. Types: SQLite est plus flexible
-     - Booleans stockes comme INTEGER (0/1)
-     - Dates stockees comme TEXT
-
-  5. Meme SQL quote style: "table"."column"
-
-  INFO
+  results = ContractsRelation.new(adapter)
+    .select(contracts: [:reference], users: [:name])
+    .join(:user)
+    .active
+    .high_value(50000_i64)
+    .order(contracts: {amount_cents: :desc})
+    .limit(5)
+    .to_a
+  print_results(results)
 
   # ---------------------------------------------------------------------------
-  # VALIDATION DEMO
+  # VALIDATION ERRORS
   # ---------------------------------------------------------------------------
-  print_section("8. Validation (SQLite)")
+  print_section("10. Validation")
 
-  puts "\n8.1 Erreur colonne inexistante:"
+  puts "\n10.1 Erreur colonne inexistante:"
   begin
     UsersRelation.new(adapter)
       .select(users: [:id, :nonexistent])
-      .to_sql
+      .to_a
   rescue ex : Quo::InvalidColumnError
-    puts "  Erreur capturee: #{ex.message}"
+    puts "  Erreur: #{ex.message}"
   end
 
-  puts "\n8.2 Erreur type mismatch:"
+  puts "\n10.2 Erreur type mismatch:"
   begin
     ContractsRelation.new(adapter)
       .where(contracts: {amount_cents: "not a number"})
-      .to_sql
+      .to_a
   rescue ex : Quo::TypeError
-    puts "  Erreur capturee: #{ex.message}"
-  end
-
-  puts "\n8.3 Erreur RIGHT JOIN non supporte:"
-  begin
-    ContractsRelation.new(adapter)
-      .right_join(:user)
-      .to_sql
-  rescue ex : Quo::AdapterError
-    puts "  Erreur capturee: #{ex.message}"
+    puts "  Erreur: #{ex.message}"
   end
 
   # ---------------------------------------------------------------------------
@@ -437,22 +424,22 @@ DB.open "sqlite3::memory:" do |db|
 
   puts <<-SUMMARY
 
-  Resume:
-  - SQLite adapter fonctionne avec vraie DB
-  - Queries executees et resultats affiches
-  - Associations (joins) fonctionnent
-  - Validation et type checking actifs
-  - Differences avec Postgres geres
+  API simplifiee:
 
-  Pour utiliser SQLite dans votre projet:
+    # Execution directe
+    results = MyRelation.new(adapter).active.to_a
 
-    require "sqlite3"
-    require "quo"
+    # Premier resultat
+    user = UsersRelation.new(adapter).admins.first
 
-    DB.open "sqlite3:./my_database.db" do |db|
-      adapter = Quo::Adapters::SQLite.new(db)
-      results = MyRelation.new(adapter).active.to_a
-    end
+    # Premier ou erreur
+    contract = ContractsRelation.new(adapter).active.first!
+
+    # Comptage
+    count = ContractsRelation.new(adapter).active.count
+
+    # Existence
+    exists = UsersRelation.new(adapter).admins.exists?
 
   SUMMARY
 end
