@@ -7,9 +7,14 @@ Complete API documentation for Quo.
 | Class | Description |
 |-------|-------------|
 | [`Query`](./query) | Immutable SQL query builder |
+| [`InsertQuery`](./insert-query) | Immutable INSERT builder |
+| [`UpdateQuery`](./update-query) | Immutable UPDATE builder |
+| [`DeleteQuery`](./delete-query) | Immutable DELETE builder |
 | [`Relation`](./relation) | Base class for table definitions |
 | [`Expression`](./expression) | WHERE clause expression types |
 | [`Schema`](./schema) | Table schema definition |
+| [`Transaction`](./transaction) | Database transaction wrapper |
+| [`Logging`](./logging) | Query logging and instrumentation |
 | [`Adapters`](./adapters) | Database adapters |
 
 ## Quick Reference
@@ -28,6 +33,25 @@ Complete API documentation for Quo.
 .offset(n)                  # OFFSET
 .distinct                   # DISTINCT
 
+# Aggregations
+.group(**columns)           # GROUP BY
+.having { |h| expr }        # HAVING
+.select_count(as: :name)    # COUNT(*)
+.select_sum(:t, :c, as: :n) # SUM(column)
+.select_avg(:t, :c, as: :n) # AVG(column)
+.select_min(:t, :c, as: :n) # MIN(column)
+.select_max(:t, :c, as: :n) # MAX(column)
+
+# Set Operations
+.union(other)               # UNION
+.union_all(other)           # UNION ALL
+.intersect(other)           # INTERSECT
+.except(other)              # EXCEPT
+
+# CTEs
+.with_cte(:name, query)     # WITH clause
+.with_recursive_cte(...)    # WITH RECURSIVE
+
 # Executing
 .to_a                       # Array of results
 .first                      # First result or nil
@@ -35,6 +59,31 @@ Complete API documentation for Quo.
 .count                      # Row count
 .exists?                    # True if any match
 .to_sql                     # Get SQL and params
+```
+
+### Mutation Methods
+
+```crystal
+# INSERT
+InsertQuery.new(:table, adapter)
+  .values(col: value)       # Set values
+  .values_many([...])       # Multiple rows
+  .returning(t: [:col])     # RETURNING clause
+  .execute                  # Execute, return rows affected
+  .execute_returning        # Execute, return rows
+
+# UPDATE
+UpdateQuery.new(:table, adapter)
+  .set(col: value)          # SET values
+  .where(t: {col: val})     # WHERE clause
+  .returning(t: [:col])     # RETURNING clause
+  .execute                  # Execute
+
+# DELETE
+DeleteQuery.new(:table, adapter)
+  .where(t: {col: val})     # WHERE clause
+  .returning(t: [:col])     # RETURNING clause
+  .execute                  # Execute
 ```
 
 ### Relation Definition

@@ -1,6 +1,6 @@
 module Quo
   # Alias for database value types - using classes instead of structs to allow recursion
-  alias Expression = ColumnRef | Eq | NotEq | Gt | Gte | Lt | Lte | Like | ILike | In | Between | IsNull | IsNotNull | And | Or | Not | Raw
+  alias Expression = ColumnRef | Eq | NotEq | Gt | Gte | Lt | Lte | Like | ILike | In | Between | IsNull | IsNotNull | And | Or | Not | Raw | InSubquery | NotInSubquery | Exists | NotExists | ScalarEq | ScalarGt | ScalarGte | ScalarLt | ScalarLte
 
   # Comparison expression: column = value
   class Eq

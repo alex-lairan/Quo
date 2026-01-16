@@ -69,6 +69,71 @@ module Quo
       IsNotNull.new(self)
     end
 
+    # Subquery membership: column IN (SELECT ...)
+    def in(subquery : Subquery) : InSubquery
+      InSubquery.new(self, subquery)
+    end
+
+    # Subquery membership from Query
+    def in(query : Query) : InSubquery
+      InSubquery.new(self, Subquery.new(query))
+    end
+
+    # Negated subquery membership: column NOT IN (SELECT ...)
+    def not_in(subquery : Subquery) : NotInSubquery
+      NotInSubquery.new(self, subquery)
+    end
+
+    # Negated subquery membership from Query
+    def not_in(query : Query) : NotInSubquery
+      NotInSubquery.new(self, Subquery.new(query))
+    end
+
+    # Scalar subquery comparison: column = (SELECT ...)
+    def eq_subquery(subquery : Subquery) : ScalarEq
+      ScalarEq.new(self, subquery)
+    end
+
+    def eq_subquery(query : Query) : ScalarEq
+      ScalarEq.new(self, Subquery.new(query))
+    end
+
+    # Scalar subquery comparison: column > (SELECT ...)
+    def gt_subquery(subquery : Subquery) : ScalarGt
+      ScalarGt.new(self, subquery)
+    end
+
+    def gt_subquery(query : Query) : ScalarGt
+      ScalarGt.new(self, Subquery.new(query))
+    end
+
+    # Scalar subquery comparison: column >= (SELECT ...)
+    def gte_subquery(subquery : Subquery) : ScalarGte
+      ScalarGte.new(self, subquery)
+    end
+
+    def gte_subquery(query : Query) : ScalarGte
+      ScalarGte.new(self, Subquery.new(query))
+    end
+
+    # Scalar subquery comparison: column < (SELECT ...)
+    def lt_subquery(subquery : Subquery) : ScalarLt
+      ScalarLt.new(self, subquery)
+    end
+
+    def lt_subquery(query : Query) : ScalarLt
+      ScalarLt.new(self, Subquery.new(query))
+    end
+
+    # Scalar subquery comparison: column <= (SELECT ...)
+    def lte_subquery(subquery : Subquery) : ScalarLte
+      ScalarLte.new(self, subquery)
+    end
+
+    def lte_subquery(query : Query) : ScalarLte
+      ScalarLte.new(self, Subquery.new(query))
+    end
+
     # Logical AND - combines with another expression
     def &(other : Expression) : And
       And.new(self, other)

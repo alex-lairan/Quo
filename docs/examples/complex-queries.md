@@ -238,16 +238,215 @@ results = ContractsRelation.new(adapter)
   .to_a
 ```
 
-## Aggregation with Subqueries
+## Aggregations
+
+### Basic GROUP BY
 
 ```crystal
-# Users with above-average post count (conceptual)
-# Note: Subqueries require raw SQL in current version
-
-avg_posts = PostsRelation.new(adapter).count / UsersRelation.new(adapter).count
-
-prolific_authors = UsersRelation.new(adapter)
-  .left_join(:posts, on: { users: :id, eq: { posts: :user_id } })
-  .where { |e| e[:posts][:id].is_not_null }
+# Count contracts by status
+contract_counts = Quo::Query.new(:contracts, adapter)
+  .select(contracts: [:status])
+  .select_count(as: :count)
+  .group(contracts: [:status])
   .to_a
+# [{"status" => "active", "count" => 42}, {"status" => "pending", "count" => 10}]
+```
+
+### GROUP BY with Multiple Columns
+
+```crystal
+# Sales by user and month
+sales_report = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+  .select_sum(:orders, :amount_cents, as: :total_sales)
+  .select_count(as: :order_count)
+  .group(orders: [:user_id])
+  .having { |h| h.count >= 5 }
+  .to_a
+```
+
+### HAVING with Aggregate Conditions
+
+```crystal
+# High-volume users with significant spending
+premium_users = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+  .select_count(as: :order_count)
+  .select_sum(:orders, :amount_cents, as: :total_spent)
+  .group(orders: [:user_id])
+  .having { |h| (h.count >= 10) & (h.sum(:orders, :amount_cents) >= 100000) }
+  .to_a
+```
+
+## Subqueries
+
+### IN Subquery
+
+```crystal
+# Users who have placed orders
+users_with_orders = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+  .distinct
+
+active_customers = UsersRelation.new(adapter)
+  .where { |e| e[:users][:id].in(users_with_orders) }
+  .to_a
+```
+
+### NOT IN Subquery
+
+```crystal
+# Users who have never placed an order
+ordered_user_ids = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+
+inactive_users = UsersRelation.new(adapter)
+  .where { |e| e[:users][:id].not_in(ordered_user_ids) }
+  .to_a
+```
+
+### EXISTS Subquery
+
+```crystal
+# Users with at least one published post
+has_published = Quo::Query.new(:posts, adapter)
+  .select(posts: [:id])
+  .where(posts: { status: "published" })
+
+authors = UsersRelation.new(adapter)
+  .where { |e| e.exists(has_published) }
+  .to_a
+```
+
+### Scalar Subquery
+
+```crystal
+# Orders above average amount
+avg_amount = Quo::Query.new(:orders, adapter)
+  .select_avg(:orders, :amount_cents)
+
+above_average = Quo::Query.new(:orders, adapter)
+  .where { |e| e[:orders][:amount_cents].gt_subquery(avg_amount) }
+  .to_a
+```
+
+## Set Operations
+
+### UNION
+
+```crystal
+# All users who are either admins OR have premium accounts
+admins = UsersRelation.new(adapter)
+  .select(users: [:id, :name, :email])
+  .where(users: { role: "admin" })
+
+premium = UsersRelation.new(adapter)
+  .select(users: [:id, :name, :email])
+  .where(users: { tier: "premium" })
+
+special_users = admins.union(premium).to_a
+```
+
+### INTERSECT
+
+```crystal
+# Users who are both active AND verified
+active = UsersRelation.new(adapter)
+  .select(users: [:id])
+  .where(users: { active: true })
+
+verified = UsersRelation.new(adapter)
+  .select(users: [:id])
+  .where(users: { verified: true })
+
+active_verified = active.intersect(verified).to_a
+```
+
+### EXCEPT
+
+```crystal
+# Active users who are NOT suspended
+all_active = UsersRelation.new(adapter)
+  .select(users: [:id, :name])
+  .where(users: { active: true })
+
+suspended = UsersRelation.new(adapter)
+  .select(users: [:id, :name])
+  .where(users: { suspended: true })
+
+good_standing = all_active.except(suspended).to_a
+```
+
+## Common Table Expressions (CTEs)
+
+### Basic CTE
+
+```crystal
+# Define top spenders as a CTE
+top_spenders_query = Quo::Query.new(:orders, adapter)
+  .select(orders: [:user_id])
+  .select_sum(:orders, :amount_cents, as: :total_spent)
+  .group(orders: [:user_id])
+  .having { |h| h.sum(:orders, :amount_cents) >= 100000 }
+
+# Use the CTE
+vip_users = Quo::Query.new(:top_spenders, adapter)
+  .with_cte(:top_spenders, top_spenders_query)
+  .select(top_spenders: [:user_id, :total_spent])
+  .to_a
+```
+
+### Multiple CTEs
+
+```crystal
+# Recent orders CTE
+recent_orders = Quo::Query.new(:orders, adapter)
+  .select(orders: [:id, :user_id, :amount_cents])
+  .where { |e| e[:orders][:created_at] >= 30.days.ago }
+
+# VIP users CTE
+vip_users = Quo::Query.new(:users, adapter)
+  .select(users: [:id])
+  .where(users: { tier: "vip" })
+
+# Query using both CTEs
+vip_recent_orders = Quo::Query.new(:recent_orders, adapter)
+  .with_cte(:recent_orders, recent_orders)
+  .with_cte(:vip_users, vip_users)
+  .select(recent_orders: [:id, :amount_cents])
+  .where { |e| e[:recent_orders][:user_id].in(
+    Quo::Query.new(:vip_users, adapter).select(vip_users: [:id])
+  )}
+  .to_a
+```
+
+## Transactions
+
+```crystal
+# Transfer funds atomically
+adapter.transaction do |tx|
+  # Check source balance
+  source = tx[:accounts].where(accounts: { id: from_id }).first!
+  balance = source["balance"].as(Int64)
+
+  raise "Insufficient funds" if balance < amount
+
+  # Debit source
+  tx.update(:accounts)
+    .set(balance: balance - amount)
+    .where(accounts: { id: from_id })
+    .execute
+
+  # Credit destination
+  dest = tx[:accounts].where(accounts: { id: to_id }).first!
+  tx.update(:accounts)
+    .set(balance: dest["balance"].as(Int64) + amount)
+    .where(accounts: { id: to_id })
+    .execute
+
+  # Log the transfer
+  tx.insert(:transfers)
+    .values(from_id: from_id, to_id: to_id, amount: amount)
+    .execute
+end
 ```

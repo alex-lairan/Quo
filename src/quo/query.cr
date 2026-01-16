@@ -1,6 +1,10 @@
 require "./expression"
 require "./expression_builder"
 require "./column_ref"
+require "./aggregation"
+require "./aggregate_expression_builder"
+require "./set_operation"
+require "./cte"
 
 module Quo
   # Join types supported in SQL
@@ -53,6 +57,11 @@ module Quo
     getter limit_value : Int32?
     getter offset_value : Int32?
     getter? distinct_enabled : Bool
+    getter aggregates : Array(Aggregate)
+    getter group_columns : Array(GroupColumn)
+    getter having_clauses : Array(HavingExpression)
+    getter set_operations : Array(SetOperation)
+    getter cte_clauses : Array(CTE)
 
     # Forward declaration for adapter - will be defined in adapters/
     @adapter : Adapters::Adapter
@@ -66,7 +75,12 @@ module Quo
       @order_clauses : Array(OrderClause) = [] of OrderClause,
       @limit_value : Int32? = nil,
       @offset_value : Int32? = nil,
-      @distinct_enabled : Bool = false
+      @distinct_enabled : Bool = false,
+      @aggregates : Array(Aggregate) = [] of Aggregate,
+      @group_columns : Array(GroupColumn) = [] of GroupColumn,
+      @having_clauses : Array(HavingExpression) = [] of HavingExpression,
+      @set_operations : Array(SetOperation) = [] of SetOperation,
+      @cte_clauses : Array(CTE) = [] of CTE
     )
     end
 
@@ -153,6 +167,123 @@ module Quo
       copy_with(distinct_enabled: true)
     end
 
+    # GROUP BY - specify grouping columns
+    # Example: .group(orders: [:status, :user_id])
+    def group(**columns) : Query
+      new_groups = [] of GroupColumn
+      columns.each do |table, cols|
+        cols.each do |col|
+          new_groups << GroupColumn.new(table, col)
+        end
+      end
+      copy_with(group_columns: @group_columns + new_groups)
+    end
+
+    # HAVING with expression block
+    # Example: .having { count > 5 }
+    def having(&block : AggregateExpressionBuilder -> HavingExpression) : Query
+      builder = AggregateExpressionBuilder.new
+      expr = yield builder
+      copy_with(having_clauses: @having_clauses + [expr])
+    end
+
+    # SELECT COUNT(*) - add count aggregate
+    # Example: .select_count(as: :total_count)
+    def select_count(*, as alias_name : Symbol? = nil) : Query
+      agg = Aggregate.count(as: alias_name)
+      copy_with(aggregates: @aggregates + [agg])
+    end
+
+    # SELECT COUNT(column) - count non-null values
+    # Example: .select_count(:users, :email, as: :email_count, distinct: true)
+    def select_count(table : Symbol, column : Symbol, *, as alias_name : Symbol? = nil, distinct : Bool = false) : Query
+      agg = Aggregate.count(table, column, as: alias_name, distinct: distinct)
+      copy_with(aggregates: @aggregates + [agg])
+    end
+
+    # SELECT SUM(column)
+    # Example: .select_sum(:orders, :amount, as: :total_amount)
+    def select_sum(table : Symbol, column : Symbol, *, as alias_name : Symbol? = nil) : Query
+      agg = Aggregate.sum(table, column, as: alias_name)
+      copy_with(aggregates: @aggregates + [agg])
+    end
+
+    # SELECT AVG(column)
+    # Example: .select_avg(:products, :price, as: :average_price)
+    def select_avg(table : Symbol, column : Symbol, *, as alias_name : Symbol? = nil) : Query
+      agg = Aggregate.avg(table, column, as: alias_name)
+      copy_with(aggregates: @aggregates + [agg])
+    end
+
+    # SELECT MIN(column)
+    # Example: .select_min(:orders, :created_at, as: :first_order)
+    def select_min(table : Symbol, column : Symbol, *, as alias_name : Symbol? = nil) : Query
+      agg = Aggregate.min(table, column, as: alias_name)
+      copy_with(aggregates: @aggregates + [agg])
+    end
+
+    # SELECT MAX(column)
+    # Example: .select_max(:orders, :amount, as: :largest_order)
+    def select_max(table : Symbol, column : Symbol, *, as alias_name : Symbol? = nil) : Query
+      agg = Aggregate.max(table, column, as: alias_name)
+      copy_with(aggregates: @aggregates + [agg])
+    end
+
+    # UNION - combine results, removing duplicates
+    # Example: active_users.union(admin_users)
+    def union(other : Query) : Query
+      op = SetOperation.new(SetOperationType::Union, other)
+      copy_with(set_operations: @set_operations + [op])
+    end
+
+    # UNION ALL - combine results, keeping duplicates
+    # Example: active_users.union_all(admin_users)
+    def union_all(other : Query) : Query
+      op = SetOperation.new(SetOperationType::UnionAll, other)
+      copy_with(set_operations: @set_operations + [op])
+    end
+
+    # INTERSECT - return only common rows
+    # Example: active_users.intersect(premium_users)
+    def intersect(other : Query) : Query
+      op = SetOperation.new(SetOperationType::Intersect, other)
+      copy_with(set_operations: @set_operations + [op])
+    end
+
+    # INTERSECT ALL - return common rows with duplicates
+    # Example: active_users.intersect_all(premium_users)
+    def intersect_all(other : Query) : Query
+      op = SetOperation.new(SetOperationType::IntersectAll, other)
+      copy_with(set_operations: @set_operations + [op])
+    end
+
+    # EXCEPT - return rows in first query not in second
+    # Example: all_users.except(deleted_users)
+    def except(other : Query) : Query
+      op = SetOperation.new(SetOperationType::Except, other)
+      copy_with(set_operations: @set_operations + [op])
+    end
+
+    # EXCEPT ALL - return rows not in second, keeping duplicates
+    # Example: all_users.except_all(deleted_users)
+    def except_all(other : Query) : Query
+      op = SetOperation.new(SetOperationType::ExceptAll, other)
+      copy_with(set_operations: @set_operations + [op])
+    end
+
+    # WITH - add a Common Table Expression (CTE)
+    # Example: .with_cte(:active_users, query)
+    def with_cte(name : Symbol, cte_query : Query, *, recursive : Bool = false) : Query
+      cte = CTE.new(name, cte_query, recursive)
+      copy_with(cte_clauses: @cte_clauses + [cte])
+    end
+
+    # WITH RECURSIVE - add a recursive CTE
+    # Example: .with_recursive_cte(:tree, recursive_query)
+    def with_recursive_cte(name : Symbol, cte_query : Query) : Query
+      with_cte(name, cte_query, recursive: true)
+    end
+
     # Merge another query's conditions into this one
     def merge(other : Query) : Query
       copy_with(
@@ -162,7 +293,12 @@ module Quo
         order_clauses: @order_clauses + other.order_clauses,
         limit_value: other.limit_value || @limit_value,
         offset_value: other.offset_value || @offset_value,
-        distinct_enabled: @distinct_enabled || other.distinct_enabled?
+        distinct_enabled: @distinct_enabled || other.distinct_enabled?,
+        aggregates: @aggregates + other.aggregates,
+        group_columns: @group_columns + other.group_columns,
+        having_clauses: @having_clauses + other.having_clauses,
+        set_operations: @set_operations + other.set_operations,
+        cte_clauses: @cte_clauses + other.cte_clauses
       )
     end
 
@@ -226,10 +362,15 @@ module Quo
     # Debug output
     def inspect(io : IO) : Nil
       io << "#<Quo::Query"
+      io << " cte=" << @cte_clauses.size unless @cte_clauses.empty?
       io << " table=:" << @table
       io << " select=" << @select_columns unless @select_columns.empty?
+      io << " aggregates=" << @aggregates.size unless @aggregates.empty?
       io << " where=" << @where_clauses.size << " clauses" unless @where_clauses.empty?
       io << " joins=" << @joins.size unless @joins.empty?
+      io << " group=" << @group_columns.size << " columns" unless @group_columns.empty?
+      io << " having=" << @having_clauses.size << " clauses" unless @having_clauses.empty?
+      io << " set_ops=" << @set_operations.size unless @set_operations.empty?
       io << " order=" << @order_clauses unless @order_clauses.empty?
       io << " limit=" << @limit_value if @limit_value
       io << " offset=" << @offset_value if @offset_value
@@ -246,7 +387,12 @@ module Quo
       order_clauses : Array(OrderClause) = @order_clauses,
       limit_value : Int32? = @limit_value,
       offset_value : Int32? = @offset_value,
-      distinct_enabled : Bool = @distinct_enabled
+      distinct_enabled : Bool = @distinct_enabled,
+      aggregates : Array(Aggregate) = @aggregates,
+      group_columns : Array(GroupColumn) = @group_columns,
+      having_clauses : Array(HavingExpression) = @having_clauses,
+      set_operations : Array(SetOperation) = @set_operations,
+      cte_clauses : Array(CTE) = @cte_clauses
     ) : Query
       Query.new(
         table: @table,
@@ -257,7 +403,12 @@ module Quo
         order_clauses: order_clauses,
         limit_value: limit_value,
         offset_value: offset_value,
-        distinct_enabled: distinct_enabled
+        distinct_enabled: distinct_enabled,
+        aggregates: aggregates,
+        group_columns: group_columns,
+        having_clauses: having_clauses,
+        set_operations: set_operations,
+        cte_clauses: cte_clauses
       )
     end
 

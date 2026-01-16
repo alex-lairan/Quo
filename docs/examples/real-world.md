@@ -40,8 +40,11 @@ class UserRepository
   end
 
   def count_by_role
-    # Group by not yet supported, use raw query
-    @adapter.execute("SELECT role, COUNT(*) as count FROM users GROUP BY role", [] of DB::Any)
+    Quo::Query.new(:users, @adapter)
+      .select(users: [:role])
+      .select_count(as: :count)
+      .group(users: [:role])
+      .to_a
   end
 end
 
@@ -282,6 +285,174 @@ query = ActiveContractsForDashboard.new(adapter)
 results = query.call(user_id: 123, min_amount: 50000_i64)
 ```
 
+## CRUD Repository
+
+Complete repository with INSERT, UPDATE, DELETE:
+
+```crystal
+class UserRepository
+  def initialize(@adapter : Quo::Adapters::Adapter)
+  end
+
+  private def relation
+    UsersRelation.new(@adapter)
+  end
+
+  # CREATE
+  def create(name : String, email : String) : Hash(String, DB::Any)?
+    Quo::InsertQuery.new(:users, @adapter)
+      .values(
+        name: name,
+        email: email,
+        status: "pending",
+        created_at: Time.utc
+      )
+      .returning(users: [:id, :name, :email, :created_at])
+      .execute_returning_one
+  end
+
+  # READ
+  def find(id : Int64) : Hash(String, DB::Any)?
+    relation.where(users: { id: id }).first
+  end
+
+  def find!(id : Int64) : Hash(String, DB::Any)
+    relation.where(users: { id: id }).first!
+  end
+
+  # UPDATE
+  def update(id : Int64, **attrs) : Int64
+    Quo::UpdateQuery.new(:users, @adapter)
+      .set(attrs)
+      .where(users: { id: id })
+      .execute
+  end
+
+  def activate(id : Int64)
+    Quo::UpdateQuery.new(:users, @adapter)
+      .set(status: "active", activated_at: Time.utc)
+      .where(users: { id: id })
+      .execute
+  end
+
+  # DELETE
+  def delete(id : Int64) : Int64
+    Quo::DeleteQuery.new(:users, @adapter)
+      .where(users: { id: id })
+      .execute
+  end
+
+  def soft_delete(id : Int64)
+    Quo::UpdateQuery.new(:users, @adapter)
+      .set(deleted_at: Time.utc, status: "deleted")
+      .where(users: { id: id })
+      .execute
+  end
+end
+
+# Usage
+repo = UserRepository.new(adapter)
+user = repo.create("Alice", "alice@example.com")
+repo.activate(user.not_nil!["id"].as(Int64))
+repo.update(1_i64, name: "Alice Smith")
+repo.soft_delete(1_i64)
+```
+
+## Transactional Operations
+
+```crystal
+class OrderService
+  def initialize(@adapter : Quo::Adapters::Adapter)
+  end
+
+  def place_order(user_id : Int64, items : Array(NamedTuple(product_id: Int64, quantity: Int32)))
+    @adapter.transaction do |tx|
+      # Create order
+      order = tx.insert(:orders)
+        .values(user_id: user_id, status: "pending", created_at: Time.utc)
+        .returning(orders: [:id])
+        .execute_returning_one
+        .not_nil!
+
+      order_id = order["id"].as(Int64)
+      total = 0_i64
+
+      # Create line items and update inventory
+      items.each do |item|
+        # Check inventory
+        inventory = tx[:inventory]
+          .where(inventory: { product_id: item[:product_id] })
+          .first!
+
+        available = inventory["quantity"].as(Int64)
+        if available < item[:quantity]
+          raise "Insufficient inventory for product #{item[:product_id]}"
+        end
+
+        # Get price
+        product = tx[:products]
+          .where(products: { id: item[:product_id] })
+          .first!
+        price = product["price_cents"].as(Int64)
+        line_total = price * item[:quantity]
+        total += line_total
+
+        # Create line item
+        tx.insert(:order_items)
+          .values(
+            order_id: order_id,
+            product_id: item[:product_id],
+            quantity: item[:quantity],
+            price_cents: price
+          )
+          .execute
+
+        # Decrease inventory
+        tx.update(:inventory)
+          .set(quantity: available - item[:quantity])
+          .where(inventory: { product_id: item[:product_id] })
+          .execute
+      end
+
+      # Update order total
+      tx.update(:orders)
+        .set(total_cents: total, status: "confirmed")
+        .where(orders: { id: order_id })
+        .execute
+
+      order_id
+    end
+  end
+end
+```
+
+## Query Logging in Production
+
+```crystal
+# config/initializers/database.cr
+Quo::Logging.log_level = Quo::LogLevel::Info
+Quo::Logging.slow_query_threshold = 100.milliseconds
+
+# Metrics
+Quo::Logging.subscribe do |event|
+  Datadog.timing("db.query", event.duration.total_milliseconds, {
+    operation: event.operation.to_s
+  })
+end
+
+# Slow query alerts
+Quo::Logging.on_slow_query do |event|
+  Logger.warn("Slow query", {
+    sql: event.sql,
+    duration_ms: event.duration.total_milliseconds
+  })
+
+  if event.duration > 5.seconds
+    AlertService.notify("Critical slow query detected")
+  end
+end
+```
+
 ## Testing
 
 ```crystal
@@ -297,6 +468,17 @@ describe ContractRepository do
 
     sql.should contain(%(WHERE "contracts"."status" = ?))
     params.should eq(["active"])
+  end
+
+  it "generates correct insert SQL" do
+    adapter = Quo::Adapters::Test.new
+
+    sql, params = Quo::InsertQuery.new(:users, adapter)
+      .values(name: "Test", email: "test@example.com")
+      .to_sql
+
+    sql.should contain(%(INSERT INTO "users"))
+    params.should eq(["Test", "test@example.com"])
   end
 end
 ```

@@ -184,6 +184,210 @@ Add DISTINCT keyword.
 
 ---
 
+## Aggregation Methods
+
+### group
+
+```crystal
+def group(**columns) : Query
+```
+
+Add GROUP BY clause.
+
+```crystal
+.group(orders: [:status])
+.group(orders: [:status, :user_id])
+```
+
+**Generated SQL:**
+```sql
+GROUP BY "orders"."status"
+GROUP BY "orders"."status", "orders"."user_id"
+```
+
+---
+
+### having
+
+```crystal
+def having(&block : AggregateExpressionBuilder -> AggregateExpression) : Query
+```
+
+Add HAVING clause for aggregate conditions.
+
+```crystal
+.having { |h| h.count > 5 }
+.having { |h| (h.count >= 3) & (h.sum(:orders, :amount) >= 1000) }
+```
+
+---
+
+### select_count
+
+```crystal
+def select_count(as : Symbol) : Query
+def select_count(table : Symbol, column : Symbol, as : Symbol, distinct : Bool = false) : Query
+```
+
+Add COUNT aggregate to SELECT.
+
+```crystal
+.select_count(as: :total)                                    # COUNT(*)
+.select_count(:orders, :user_id, as: :user_count)           # COUNT(column)
+.select_count(:orders, :user_id, as: :unique, distinct: true) # COUNT(DISTINCT column)
+```
+
+---
+
+### select_sum
+
+```crystal
+def select_sum(table : Symbol, column : Symbol, as : Symbol) : Query
+```
+
+Add SUM aggregate to SELECT.
+
+```crystal
+.select_sum(:orders, :amount, as: :total_amount)
+```
+
+---
+
+### select_avg
+
+```crystal
+def select_avg(table : Symbol, column : Symbol, as : Symbol) : Query
+```
+
+Add AVG aggregate to SELECT.
+
+```crystal
+.select_avg(:products, :price, as: :average_price)
+```
+
+---
+
+### select_min
+
+```crystal
+def select_min(table : Symbol, column : Symbol, as : Symbol) : Query
+```
+
+Add MIN aggregate to SELECT.
+
+```crystal
+.select_min(:orders, :created_at, as: :first_order)
+```
+
+---
+
+### select_max
+
+```crystal
+def select_max(table : Symbol, column : Symbol, as : Symbol) : Query
+```
+
+Add MAX aggregate to SELECT.
+
+```crystal
+.select_max(:orders, :amount, as: :largest_order)
+```
+
+---
+
+## Set Operations
+
+### union
+
+```crystal
+def union(other : Query) : Query
+```
+
+Combine results, removing duplicates.
+
+```crystal
+active_users.union(admin_users)
+```
+
+---
+
+### union_all
+
+```crystal
+def union_all(other : Query) : Query
+```
+
+Combine results, keeping duplicates.
+
+```crystal
+query1.union_all(query2)
+```
+
+---
+
+### intersect
+
+```crystal
+def intersect(other : Query) : Query
+```
+
+Return only rows in both queries.
+
+```crystal
+active.intersect(premium)  # Active AND premium
+```
+
+---
+
+### except
+
+```crystal
+def except(other : Query) : Query
+```
+
+Return rows in first query not in second.
+
+```crystal
+all_users.except(deleted)  # Non-deleted users
+```
+
+---
+
+## CTE Methods
+
+### with_cte
+
+```crystal
+def with_cte(name : Symbol, query : Query) : Query
+```
+
+Add a Common Table Expression (WITH clause).
+
+```crystal
+.with_cte(:active_users, active_users_query)
+```
+
+**Generated SQL:**
+```sql
+WITH "active_users" AS (SELECT ...) SELECT ... FROM "active_users"
+```
+
+---
+
+### with_recursive_cte
+
+```crystal
+def with_recursive_cte(name : Symbol, query : Query) : Query
+```
+
+Add a recursive CTE (WITH RECURSIVE clause).
+
+```crystal
+.with_recursive_cte(:tree, category_tree_query)
+```
+
+---
+
 ## Terminal Methods
 
 These execute the query and return results.

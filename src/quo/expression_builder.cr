@@ -19,6 +19,26 @@ module Quo
     def not(expr : Expression) : Not
       Not.new(expr)
     end
+
+    # Create an EXISTS expression
+    # Example: exists(subquery)
+    def exists(subquery : Subquery) : Exists
+      Exists.new(subquery)
+    end
+
+    def exists(query : Query) : Exists
+      Exists.new(Subquery.new(query))
+    end
+
+    # Create a NOT EXISTS expression
+    # Example: not_exists(subquery)
+    def not_exists(subquery : Subquery) : NotExists
+      NotExists.new(subquery)
+    end
+
+    def not_exists(query : Query) : NotExists
+      NotExists.new(Subquery.new(query))
+    end
   end
 
   # Intermediate object for table[:column] syntax

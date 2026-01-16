@@ -56,11 +56,19 @@ export default defineConfig({
           ]
         },
         {
+          text: 'Data Manipulation',
+          items: [
+            { text: 'Mutations', link: '/guide/mutations' },
+            { text: 'Transactions', link: '/guide/transactions' },
+          ]
+        },
+        {
           text: 'Advanced',
           items: [
             { text: 'Joins & Associations', link: '/guide/joins' },
             { text: 'Validation', link: '/guide/validation' },
             { text: 'Adapters', link: '/guide/adapters' },
+            { text: 'Logging', link: '/guide/logging' },
           ]
         }
       ],
@@ -70,9 +78,14 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/api/' },
             { text: 'Query', link: '/api/query' },
+            { text: 'InsertQuery', link: '/api/insert-query' },
+            { text: 'UpdateQuery', link: '/api/update-query' },
+            { text: 'DeleteQuery', link: '/api/delete-query' },
             { text: 'Relation', link: '/api/relation' },
             { text: 'Expression', link: '/api/expression' },
             { text: 'Schema', link: '/api/schema' },
+            { text: 'Transaction', link: '/api/transaction' },
+            { text: 'Logging', link: '/api/logging' },
             { text: 'Adapters', link: '/api/adapters' },
           ]
         }

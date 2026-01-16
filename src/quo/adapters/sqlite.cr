@@ -19,6 +19,20 @@ module Quo
         params = [] of DB::Any
 
         sql = String.build do |str|
+          # WITH clause (CTEs)
+          unless query.cte_clauses.empty?
+            has_recursive = query.cte_clauses.any?(&.recursive?)
+            str << (has_recursive ? "WITH RECURSIVE " : "WITH ")
+
+            cte_parts = query.cte_clauses.map do |cte|
+              cte_sql, cte_params = compile_for_set_operation(cte.query)
+              params.concat(cte_params)
+              "#{quote_identifier(cte.name)} AS (#{cte_sql})"
+            end
+            str << cte_parts.join(", ")
+            str << " "
+          end
+
           # SELECT clause
           str << "SELECT "
           str << "DISTINCT " if query.distinct_enabled?
@@ -44,6 +58,23 @@ module Quo
             str << where_parts.join(" AND ")
           end
 
+          # GROUP BY clause
+          unless query.group_columns.empty?
+            str << " GROUP BY "
+            str << compile_group_by(query.group_columns)
+          end
+
+          # HAVING clause
+          unless query.having_clauses.empty?
+            str << " HAVING "
+            having_parts = query.having_clauses.map do |expr|
+              sql_part, expr_params = compile_having_expression(expr)
+              params.concat(expr_params)
+              sql_part
+            end
+            str << having_parts.join(" AND ")
+          end
+
           # ORDER BY clause
           unless query.order_clauses.empty?
             str << " ORDER BY "
@@ -62,6 +93,75 @@ module Quo
             str << " OFFSET "
             str << placeholder
             params << offset.as(DB::Any)
+          end
+
+          # Set operations (UNION, INTERSECT, EXCEPT)
+          query.set_operations.each do |set_op|
+            op_sql = case set_op.operation_type
+                     in SetOperationType::Union        then "UNION"
+                     in SetOperationType::UnionAll     then "UNION ALL"
+                     in SetOperationType::Intersect    then "INTERSECT"
+                     in SetOperationType::IntersectAll then "INTERSECT ALL"
+                     in SetOperationType::Except       then "EXCEPT"
+                     in SetOperationType::ExceptAll    then "EXCEPT ALL"
+                     end
+            str << " " << op_sql << " "
+
+            # Compile the other query
+            other_sql, other_params = compile_for_set_operation(set_op.query)
+            str << other_sql
+            params.concat(other_params)
+          end
+        end
+
+        {sql, params}
+      end
+
+      # Compile a query for use in a set operation
+      private def compile_for_set_operation(query : Query) : {String, Array(DB::Any)}
+        params = [] of DB::Any
+
+        sql = String.build do |str|
+          # SELECT clause
+          str << "SELECT "
+          str << "DISTINCT " if query.distinct_enabled?
+          str << compile_select(query)
+
+          # FROM clause
+          str << " FROM "
+          str << quote_identifier(query.table)
+
+          # JOIN clauses
+          query.joins.each do |join|
+            str << compile_join(join)
+          end
+
+          # WHERE clause
+          unless query.where_clauses.empty?
+            str << " WHERE "
+            where_parts = query.where_clauses.map do |expr|
+              sql_part, expr_params = compile_expression(expr)
+              params.concat(expr_params)
+              sql_part
+            end
+            str << where_parts.join(" AND ")
+          end
+
+          # GROUP BY clause
+          unless query.group_columns.empty?
+            str << " GROUP BY "
+            str << compile_group_by(query.group_columns)
+          end
+
+          # HAVING clause
+          unless query.having_clauses.empty?
+            str << " HAVING "
+            having_parts = query.having_clauses.map do |expr|
+              sql_part, expr_params = compile_having_expression(expr)
+              params.concat(expr_params)
+              sql_part
+            end
+            str << having_parts.join(" AND ")
           end
         end
 
@@ -116,7 +216,16 @@ module Quo
             row = {} of String => DB::Any
             rs.column_count.times do |i|
               col_name = rs.column_name(i)
-              row[col_name] = rs.read
+              value = rs.read
+              # Cast SQLite native types to DB::Any compatible types
+              row[col_name] = case value
+                              when Bool, Int32, Int64, Float32, Float64, String, Time, Nil
+                                value.as(DB::Any)
+                              when Slice(UInt8)
+                                value.as(DB::Any)
+                              else
+                                value.to_s.as(DB::Any)
+                              end
             end
             results << row
           end
@@ -138,13 +247,109 @@ module Quo
       end
 
       private def compile_select(query : Query) : String
-        if query.select_columns.empty?
-          "#{quote_identifier(query.table)}.*"
+        parts = [] of String
+
+        # Regular columns
+        if query.select_columns.empty? && query.aggregates.empty?
+          parts << "#{quote_identifier(query.table)}.*"
         else
-          query.select_columns.map do |col|
-            "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
-          end.join(", ")
+          query.select_columns.each do |col|
+            parts << "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
+          end
         end
+
+        # Aggregate functions
+        query.aggregates.each do |agg|
+          parts << compile_aggregate(agg)
+        end
+
+        parts.join(", ")
+      end
+
+      private def compile_aggregate(agg : Aggregate) : String
+        func_name = case agg.function
+                    in AggregateFunction::Count then "COUNT"
+                    in AggregateFunction::Sum   then "SUM"
+                    in AggregateFunction::Avg   then "AVG"
+                    in AggregateFunction::Min   then "MIN"
+                    in AggregateFunction::Max   then "MAX"
+                    end
+
+        inner = if col = agg.column
+                  col_str = "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
+                  agg.distinct? ? "DISTINCT #{col_str}" : col_str
+                else
+                  "*"
+                end
+
+        result = "#{func_name}(#{inner})"
+
+        if alias_name = agg.alias_name
+          result += " AS #{quote_identifier(alias_name)}"
+        end
+
+        result
+      end
+
+      private def compile_group_by(columns : Array(GroupColumn)) : String
+        columns.map do |col|
+          "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
+        end.join(", ")
+      end
+
+      private def compile_having_expression(expr : HavingExpression) : {String, Array(DB::Any)}
+        case expr
+        when AggregateGt
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} > #{placeholder}", [expr.value]}
+        when AggregateGte
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} >= #{placeholder}", [expr.value]}
+        when AggregateLt
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} < #{placeholder}", [expr.value]}
+        when AggregateLte
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} <= #{placeholder}", [expr.value]}
+        when AggregateEq
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} = #{placeholder}", [expr.value]}
+        when AggregateNotEq
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} != #{placeholder}", [expr.value]}
+        when AggregateBetween
+          agg_sql = compile_aggregate_for_having(expr.aggregate)
+          {"#{agg_sql} BETWEEN #{placeholder} AND #{placeholder}", [expr.min, expr.max]}
+        when HavingAnd
+          left_sql, left_params = compile_having_expression(expr.left)
+          right_sql, right_params = compile_having_expression(expr.right)
+          {"(#{left_sql} AND #{right_sql})", left_params + right_params}
+        when HavingOr
+          left_sql, left_params = compile_having_expression(expr.left)
+          right_sql, right_params = compile_having_expression(expr.right)
+          {"(#{left_sql} OR #{right_sql})", left_params + right_params}
+        else
+          raise UnsupportedExpressionError.new(expr.class.name)
+        end
+      end
+
+      private def compile_aggregate_for_having(agg : Aggregate) : String
+        func_name = case agg.function
+                    in AggregateFunction::Count then "COUNT"
+                    in AggregateFunction::Sum   then "SUM"
+                    in AggregateFunction::Avg   then "AVG"
+                    in AggregateFunction::Min   then "MIN"
+                    in AggregateFunction::Max   then "MAX"
+                    end
+
+        inner = if col = agg.column
+                  col_str = "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
+                  agg.distinct? ? "DISTINCT #{col_str}" : col_str
+                else
+                  "*"
+                end
+
+        "#{func_name}(#{inner})"
       end
 
       private def compile_join(join : Join) : String
@@ -209,6 +414,33 @@ module Quo
           {"NOT (#{inner_sql})", inner_params}
         when Raw
           {expr.sql, expr.params}
+        when InSubquery
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} IN (#{sub_sql})", sub_params}
+        when NotInSubquery
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} NOT IN (#{sub_sql})", sub_params}
+        when Exists
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"EXISTS (#{sub_sql})", sub_params}
+        when NotExists
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"NOT EXISTS (#{sub_sql})", sub_params}
+        when ScalarEq
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} = (#{sub_sql})", sub_params}
+        when ScalarGt
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} > (#{sub_sql})", sub_params}
+        when ScalarGte
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} >= (#{sub_sql})", sub_params}
+        when ScalarLt
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} < (#{sub_sql})", sub_params}
+        when ScalarLte
+          sub_sql, sub_params = compile(expr.subquery.query)
+          {"#{compile_column(expr.column)} <= (#{sub_sql})", sub_params}
         else
           raise UnsupportedExpressionError.new(expr.class.name)
         end
@@ -223,6 +455,186 @@ module Quo
           dir = c.direction == :desc ? "DESC" : "ASC"
           "#{quote_identifier(c.table)}.#{quote_identifier(c.column)} #{dir}"
         end.join(", ")
+      end
+
+      # Compile INSERT query
+      def compile_insert(query : InsertQuery) : {String, Array(DB::Any)}
+        raise QueryError.new("INSERT requires at least one row of values") if query.values_list.empty?
+
+        # SQLite 3.35+ supports RETURNING, but we'll keep it compatible with older versions
+        # If RETURNING is specified, warn that it may not work on older SQLite versions
+        params = [] of DB::Any
+
+        # Get all unique columns from all rows
+        all_columns = query.values_list.flat_map(&.keys).uniq
+
+        sql = String.build do |str|
+          str << "INSERT INTO "
+          str << quote_identifier(query.table)
+          str << " ("
+          str << all_columns.map { |c| quote_identifier(c) }.join(", ")
+          str << ") VALUES "
+
+          # Generate VALUES for each row
+          value_groups = query.values_list.map do |row|
+            row_values = all_columns.map do |col|
+              if row.has_key?(col)
+                params << row[col]
+                placeholder
+              else
+                "NULL"  # SQLite uses NULL instead of DEFAULT for missing columns
+              end
+            end
+            "(#{row_values.join(", ")})"
+          end
+          str << value_groups.join(", ")
+
+          # RETURNING clause (SQLite 3.35+)
+          unless query.returning_columns.empty?
+            str << " RETURNING "
+            str << query.returning_columns.map { |c| quote_identifier(c.column) }.join(", ")
+          end
+        end
+
+        {sql, params}
+      end
+
+      # Execute INSERT and return affected rows
+      def execute_insert(sql : String, params : Array(DB::Any)) : Int64
+        connection = @connection || raise AdapterError.new("No database connection")
+        result = connection.exec(sql, args: params)
+        result.rows_affected
+      end
+
+      # Compile UPDATE query
+      def compile_update(query : UpdateQuery) : {String, Array(DB::Any)}
+        raise QueryError.new("UPDATE requires at least one SET value") if query.set_values.empty?
+
+        params = [] of DB::Any
+
+        sql = String.build do |str|
+          str << "UPDATE "
+          str << quote_identifier(query.table)
+          str << " SET "
+
+          # SET clause
+          set_parts = query.set_values.map do |col, value|
+            params << value
+            "#{quote_identifier(col)} = #{placeholder}"
+          end
+          str << set_parts.join(", ")
+
+          # WHERE clause
+          unless query.where_clauses.empty?
+            str << " WHERE "
+            where_parts = query.where_clauses.map do |expr|
+              sql_part, expr_params = compile_expression(expr)
+              params.concat(expr_params)
+              sql_part
+            end
+            str << where_parts.join(" AND ")
+          end
+
+          # RETURNING clause (SQLite 3.35+)
+          unless query.returning_columns.empty?
+            str << " RETURNING "
+            str << query.returning_columns.map { |c| quote_identifier(c.column) }.join(", ")
+          end
+        end
+
+        {sql, params}
+      end
+
+      # Execute UPDATE and return affected rows
+      def execute_update(sql : String, params : Array(DB::Any)) : Int64
+        connection = @connection || raise AdapterError.new("No database connection")
+        result = connection.exec(sql, args: params)
+        result.rows_affected
+      end
+
+      # Compile DELETE query
+      def compile_delete(query : DeleteQuery) : {String, Array(DB::Any)}
+        params = [] of DB::Any
+
+        sql = String.build do |str|
+          str << "DELETE FROM "
+          str << quote_identifier(query.table)
+
+          # WHERE clause
+          unless query.where_clauses.empty?
+            str << " WHERE "
+            where_parts = query.where_clauses.map do |expr|
+              sql_part, expr_params = compile_expression(expr)
+              params.concat(expr_params)
+              sql_part
+            end
+            str << where_parts.join(" AND ")
+          end
+
+          # RETURNING clause (SQLite 3.35+)
+          unless query.returning_columns.empty?
+            str << " RETURNING "
+            str << query.returning_columns.map { |c| quote_identifier(c.column) }.join(", ")
+          end
+        end
+
+        {sql, params}
+      end
+
+      # Execute DELETE and return affected rows
+      def execute_delete(sql : String, params : Array(DB::Any)) : Int64
+        connection = @connection || raise AdapterError.new("No database connection")
+        result = connection.exec(sql, args: params)
+        result.rows_affected
+      end
+
+      # Execute a block within a database transaction
+      # SQLite supports DEFERRED, IMMEDIATE, or EXCLUSIVE transactions
+      # IsolationLevel maps to these: ReadUncommitted/ReadCommitted -> DEFERRED, RepeatableRead -> IMMEDIATE, Serializable -> EXCLUSIVE
+      def transaction(isolation : IsolationLevel? = nil, &block : Transaction -> T) : T forall T
+        connection = @connection || raise AdapterError.new("No database connection")
+
+        # SQLite transaction modes
+        tx_mode = if isolation
+                    case isolation
+                    in IsolationLevel::ReadUncommitted then "DEFERRED"
+                    in IsolationLevel::ReadCommitted   then "DEFERRED"
+                    in IsolationLevel::RepeatableRead  then "IMMEDIATE"
+                    in IsolationLevel::Serializable    then "EXCLUSIVE"
+                    end
+                  else
+                    "DEFERRED"
+                  end
+
+        connection.exec("BEGIN #{tx_mode}")
+
+        begin
+          tx = Transaction.new(self)
+          result = yield tx
+          connection.exec("COMMIT")
+          result
+        rescue ex
+          connection.exec("ROLLBACK")
+          raise ex
+        end
+      end
+
+      # Create a savepoint
+      def create_savepoint(name : Symbol) : Nil
+        connection = @connection || raise AdapterError.new("No database connection")
+        connection.exec("SAVEPOINT #{name}")
+      end
+
+      # Rollback to a savepoint
+      def rollback_to_savepoint(name : Symbol) : Nil
+        connection = @connection || raise AdapterError.new("No database connection")
+        connection.exec("ROLLBACK TO SAVEPOINT #{name}")
+      end
+
+      # Release a savepoint
+      def release_savepoint(name : Symbol) : Nil
+        connection = @connection || raise AdapterError.new("No database connection")
+        connection.exec("RELEASE SAVEPOINT #{name}")
       end
     end
   end
