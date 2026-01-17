@@ -52,6 +52,7 @@ export default defineConfig({
             { text: 'Queries', link: '/guide/queries' },
             { text: 'Expressions', link: '/guide/expressions' },
             { text: 'Relations', link: '/guide/relations' },
+            { text: 'Repositories', link: '/guide/repositories' },
             { text: 'Scopes', link: '/guide/scopes' },
           ]
         },
@@ -91,6 +92,7 @@ export default defineConfig({
             { text: 'UpdateQuery', link: '/api/update-query' },
             { text: 'DeleteQuery', link: '/api/delete-query' },
             { text: 'Relation', link: '/api/relation' },
+            { text: 'Repository', link: '/api/repository' },
             { text: 'Expression', link: '/api/expression' },
             { text: 'Schema', link: '/api/schema' },
             { text: 'Transaction', link: '/api/transaction' },
