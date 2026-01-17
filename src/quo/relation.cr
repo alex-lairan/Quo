@@ -202,7 +202,7 @@ module Quo
     end
 
     # Terminal: execute and return hash array
-    def to_a : Array(Hash(String, DB::Any))
+    def to_a : Array(Quo::Row)
       @query.to_a
     end
 
@@ -212,7 +212,7 @@ module Quo
     end
 
     # Terminal: get first result
-    def first : Hash(String, DB::Any)?
+    def first : Quo::Row?
       @query.first
     end
 
@@ -222,7 +222,7 @@ module Quo
     end
 
     # Terminal: get first result or raise
-    def first! : Hash(String, DB::Any)
+    def first! : Quo::Row
       @query.first!
     end
 
