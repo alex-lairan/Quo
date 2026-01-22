@@ -1,5 +1,7 @@
 require "../spec_helper"
 
+include Quo::ColumnHelpers
+
 describe Quo::Query do
   describe "#select" do
     it "sets columns with table qualification" do
@@ -27,6 +29,63 @@ describe Quo::Query do
 
       sql, _ = query.to_sql
       sql.should contain(%("contracts".*))
+    end
+  end
+
+  describe "#select with aliased columns" do
+    it "allows aliasing a single column with t() helper" do
+      query = build_query(:users)
+        .select(t(:users)[:name].aliased(:user_name))
+
+      sql, _ = query.to_sql
+      sql.should contain(%("users"."name" AS "user_name"))
+    end
+
+    it "allows aliasing multiple columns with t() helper" do
+      query = build_query(:users)
+        .select(
+          t(:users)[:name].aliased(:full_name),
+          t(:users)[:email].aliased(:email_address)
+        )
+
+      sql, _ = query.to_sql
+      sql.should contain(%("users"."name" AS "full_name"))
+      sql.should contain(%("users"."email" AS "email_address"))
+    end
+
+    it "allows mixing regular and aliased columns in same select with t() helper" do
+      query = build_query(:users)
+        .select(
+          t(:users)[:id],
+          t(:users)[:name].aliased(:user_name)
+        )
+
+      sql, _ = query.to_sql
+      sql.should contain(%("users"."id"))
+      sql.should contain(%("users"."name" AS "user_name"))
+    end
+
+    it "can combine hash select with aliased select using t() helper" do
+      query = build_query(:users)
+        .select(users: [:id])
+        .select(t(:users)[:name].aliased(:user_name))
+
+      sql, _ = query.to_sql
+      sql.should contain(%("users"."id"))
+      sql.should contain(%("users"."name" AS "user_name"))
+    end
+
+    it "works with joined tables using t() helper" do
+      query = build_query(:contracts)
+        .join(:users, on: {contracts: :user_id, eq: {users: :id}})
+        .select(
+          t(:contracts)[:reference].aliased(:contract_ref),
+          t(:users)[:name].aliased(:user_name)
+        )
+
+      sql, _ = query.to_sql
+      sql.should contain(%("contracts"."reference" AS "contract_ref"))
+      sql.should contain(%("users"."name" AS "user_name"))
     end
   end
 

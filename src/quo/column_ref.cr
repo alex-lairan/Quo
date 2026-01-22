@@ -1,4 +1,21 @@
 module Quo
+  # Forward declaration for AliasedColumn
+  struct AliasedColumn; end
+
+  # Intermediate object for table[:column] syntax
+  # Example: t(:profiles)[:id] returns ColumnRef.new(:profiles, :id)
+  struct TableRef
+    getter table : Symbol
+
+    def initialize(@table)
+    end
+
+    # Access a column on this table
+    def [](column : Symbol) : ColumnRef
+      ColumnRef.new(@table, column)
+    end
+  end
+
   # Table-qualified column reference
   # Represents a column in the form table[:column]
   # Example: contracts[:status] creates ColumnRef.new(:contracts, :status)
@@ -7,6 +24,13 @@ module Quo
     getter column : Symbol
 
     def initialize(@table, @column)
+    end
+
+    # Create an aliased column: table[:column].aliased(:alias)
+    # Example: organizations[:name].aliased(:org_name)
+    # Produces: "organizations"."name" AS "org_name"
+    def aliased(alias_name : Symbol) : AliasedColumn
+      AliasedColumn.new(self, alias_name)
     end
 
     # Equality comparison: column = value
@@ -144,4 +168,28 @@ module Quo
       Or.new(self, other)
     end
   end
+
+  # Aliased column reference
+  # Represents a column with an alias: table[:column].as(:alias)
+  # Example: organizations[:name].as(:org_name)
+  # Produces SQL: "organizations"."name" AS "org_name"
+  struct AliasedColumn
+    getter column : ColumnRef
+    getter alias_name : Symbol
+
+    def initialize(@column, @alias_name)
+    end
+
+    # Delegate table/column access for convenience
+    def table : Symbol
+      @column.table
+    end
+
+    def original_column : Symbol
+      @column.column
+    end
+  end
+
+  # Union type for SELECT columns - can be plain or aliased
+  alias SelectColumn = ColumnRef | AliasedColumn
 end

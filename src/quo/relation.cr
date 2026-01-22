@@ -1,5 +1,6 @@
 require "./query"
 require "./schema"
+require "./column_helpers"
 
 module Quo
   # Base class for defining relations with schemas and scopes
@@ -18,6 +19,8 @@ module Quo
   #     end
   #   end
   abstract class Relation
+    include ColumnHelpers
+
     # Macro to define the schema for this relation
     macro schema(table_name, &block)
       @@table : Symbol = {{table_name}}
@@ -85,6 +88,12 @@ module Quo
     # Get the schema
     def schema : Schema
       self.class.schema_definition
+    end
+
+    # SELECT with column references (supports aliasing)
+    # Example: .select(t(:profiles)[:id], t(:organizations)[:name].aliased(:org_name))
+    def select(*columns : SelectColumn) : self
+      with_query(@query.select(*columns))
     end
 
     # SELECT - specify columns (with validation)

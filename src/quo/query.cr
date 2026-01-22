@@ -50,7 +50,7 @@ module Quo
   # Each method returns a new Query instance, leaving the original unchanged
   class Query
     getter table : Symbol
-    getter select_columns : Array(ColumnRef)
+    getter select_columns : Array(SelectColumn)
     getter where_clauses : Array(Expression)
     getter joins : Array(Join)
     getter order_clauses : Array(OrderClause)
@@ -69,7 +69,7 @@ module Quo
     def initialize(
       @table : Symbol,
       @adapter : Adapters::Adapter,
-      @select_columns : Array(ColumnRef) = [] of ColumnRef,
+      @select_columns : Array(SelectColumn) = [] of SelectColumn,
       @where_clauses : Array(Expression) = [] of Expression,
       @joins : Array(Join) = [] of Join,
       @order_clauses : Array(OrderClause) = [] of OrderClause,
@@ -87,13 +87,19 @@ module Quo
     # SELECT - specify columns with table qualification
     # Example: .select(contracts: [:id, :reference], users: [:name])
     def select(**columns) : Query
-      new_columns = [] of ColumnRef
+      new_columns = [] of SelectColumn
       columns.each do |table, cols|
         cols.each do |col|
           new_columns << ColumnRef.new(table, col)
         end
       end
       copy_with(select_columns: @select_columns + new_columns)
+    end
+
+    # SELECT with column references (supports aliasing)
+    # Example: .select(t(:profiles)[:id], t(:organizations)[:name].aliased(:org_name))
+    def select(*columns : SelectColumn) : Query
+      copy_with(select_columns: @select_columns + columns.to_a)
     end
 
     # WHERE with hash - table-qualified conditions
@@ -396,7 +402,7 @@ module Quo
     # Create a copy of this query with modified fields
     # Used internally and by Relation for association joins
     def copy_with(
-      select_columns : Array(ColumnRef) = @select_columns,
+      select_columns : Array(SelectColumn) = @select_columns,
       where_clauses : Array(Expression) = @where_clauses,
       joins : Array(Join) = @joins,
       order_clauses : Array(OrderClause) = @order_clauses,

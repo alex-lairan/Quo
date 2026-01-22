@@ -28,6 +28,78 @@ Returns a `ColumnRef` that can be used with operators.
 .where { |e| e[:contracts][:amount] >= 1000 }
 ```
 
+### ColumnRef Struct
+
+Direct construction of column references:
+
+```crystal
+ColumnRef.new(:users, :name)
+```
+
+**Properties:**
+- `table : Symbol` - The table name
+- `column : Symbol` - The column name
+
+### Aliased Columns
+
+Create an aliased column reference using `.aliased()`:
+
+```crystal
+# In Relation (using t() helper)
+t(:users)[:name].aliased(:user_name)
+
+# Direct ColumnRef construction
+ColumnRef.new(:users, :name).aliased(:user_name)
+```
+
+**Generated SQL:**
+```sql
+"users"."name" AS "user_name"
+```
+
+### AliasedColumn Struct
+
+Represents a column with an alias.
+
+**Properties:**
+- `column : ColumnRef` - The original column reference
+- `alias_name : Symbol` - The alias for the column
+- `table : Symbol` - Delegates to `column.table`
+- `original_column : Symbol` - Returns `column.column`
+
+### TableRef Helper
+
+The `t()` method is available through the `Quo::ColumnHelpers` module:
+
+```crystal
+# In Relation (automatically included)
+t(:users)        # Returns TableRef.new(:users)
+t(:users)[:name] # Returns ColumnRef.new(:users, :name)
+
+# In your own code, include the module
+include Quo::ColumnHelpers
+
+t(:users)[:email].aliased(:contact_email)
+```
+
+**Usage in SELECT:**
+```crystal
+relation.select(
+  t(:users)[:id],
+  t(:users)[:name].aliased(:full_name)
+)
+```
+
+**Usage in specs or helpers:**
+```crystal
+require "quo"
+
+include Quo::ColumnHelpers
+
+# Now you can use t() directly
+column = t(:users)[:name].aliased(:user_name)
+```
+
 ---
 
 ## Comparison Operators

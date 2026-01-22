@@ -44,6 +44,33 @@ users = UsersRelation.new(adapter)
   .to_a
 ```
 
+## SELECT with Aliases
+
+```crystal
+# Alias a single column
+users = UsersRelation.new(adapter)
+  .select(
+    t(:users)[:id],
+    t(:users)[:name].aliased(:full_name)
+  )
+  .to_a
+# Returns: [{"id" => 1, "full_name" => "Alice"}, ...]
+
+# Multiple aliased columns
+users = UsersRelation.new(adapter)
+  .select(
+    t(:users)[:name].aliased(:user_name),
+    t(:users)[:email].aliased(:contact_email)
+  )
+  .to_a
+
+# Mix hash-based and aliased columns
+users = UsersRelation.new(adapter)
+  .select(users: [:id])
+  .select(t(:users)[:name].aliased(:full_name))
+  .to_a
+```
+
 ## WHERE Conditions
 
 ### Hash Syntax

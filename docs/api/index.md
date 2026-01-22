@@ -17,13 +17,31 @@ Complete API documentation for Quo.
 | [`Logging`](./logging) | Query logging and instrumentation |
 | [`Adapters`](./adapters) | Database adapters |
 
+## Helper Modules
+
+| Module | Description |
+|--------|-------------|
+| `Quo::ColumnHelpers` | Provides `t()` helper for creating column references. Include in your code to access `t(:table)[:column]` syntax. Automatically included in `Relation`. |
+
 ## Quick Reference
+
+### Column Helpers
+
+```crystal
+# Include in your code for t() helper
+include Quo::ColumnHelpers
+
+# Create column references
+t(:users)[:name]                    # ColumnRef
+t(:users)[:name].aliased(:user_name) # AliasedColumn
+```
 
 ### Query Methods
 
 ```crystal
 # Building
-.select(**columns)          # SELECT columns
+.select(**columns)          # SELECT columns (hash syntax)
+.select(*columns)           # SELECT columns (with column refs)
 .where(**conditions)        # WHERE with hash
 .where { |e| expr }         # WHERE with expression
 .join(:assoc)               # INNER JOIN via association

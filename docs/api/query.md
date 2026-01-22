@@ -17,13 +17,13 @@ Typically created via a Relation rather than directly.
 
 All methods return a new `Query` instance.
 
-### select
+### select (Hash)
 
 ```crystal
 def select(**columns) : Query
 ```
 
-Specify columns to select. Always table-qualified.
+Specify columns to select using hash syntax. Always table-qualified.
 
 ```crystal
 .select(users: [:id, :name, :email])
@@ -34,6 +34,38 @@ Specify columns to select. Always table-qualified.
 ```sql
 SELECT "users"."id", "users"."name", "users"."email" FROM "users"
 ```
+
+---
+
+### select (Column References)
+
+```crystal
+def select(*columns : SelectColumn) : Query
+```
+
+Specify columns using `ColumnRef` objects, supporting aliasing.
+
+```crystal
+# Using ColumnRef directly (in Query)
+col1 = ColumnRef.new(:users, :id)
+col2 = ColumnRef.new(:users, :name).aliased(:user_name)
+query.select(col1, col2)
+
+# Using t() helper (in Relation)
+relation.select(
+  t(:users)[:id],
+  t(:users)[:name].aliased(:user_name)
+)
+```
+
+**Generated SQL:**
+```sql
+SELECT "users"."id", "users"."name" AS "user_name" FROM "users"
+```
+
+**SelectColumn union type:**
+- `ColumnRef` - Regular column reference
+- `AliasedColumn` - Column with an alias
 
 ---
 

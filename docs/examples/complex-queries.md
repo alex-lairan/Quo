@@ -95,6 +95,32 @@ contracts = ContractsRelation.new(adapter)
   .to_a
 ```
 
+### Joins with Aliased Columns
+
+When joining tables with overlapping column names, use aliases for clarity:
+
+```crystal
+# Disambiguate 'name' from users and companies
+contracts = ContractsRelation.new(adapter)
+  .join(:user)
+  .join(:company)
+  .select(
+    t(:contracts)[:reference],
+    t(:users)[:name].aliased(:user_name),
+    t(:companies)[:name].aliased(:company_name),
+    t(:companies)[:country]
+  )
+  .to_a
+# Returns: [
+#   {
+#     "reference" => "CT-001",
+#     "user_name" => "Alice",
+#     "company_name" => "Acme Corp",
+#     "country" => "USA"
+#   }
+# ]
+```
+
 ### LEFT JOIN
 
 ```crystal

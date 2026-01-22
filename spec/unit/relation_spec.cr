@@ -1,5 +1,7 @@
 require "../spec_helper"
 
+include Quo::ColumnHelpers
+
 # Test relation for specs
 class TestContractsRelation < Quo::Relation
   schema :contracts do
@@ -25,6 +27,10 @@ class TestContractsRelation < Quo::Relation
 
   scope :by_recent do
     query.order(contracts: {created_at: :desc})
+  end
+
+  scope :with_ref_alias do
+    query.select(t(:contracts)[:reference].aliased(:ref))
   end
 end
 
@@ -123,6 +129,14 @@ describe Quo::Relation do
       sql, _ = relation.to_sql
       sql.should_not contain(%(WHERE))
     end
+
+    it "scopes can use t() helper for aliased columns" do
+      relation = TestContractsRelation.new(test_adapter)
+      scoped = relation.with_ref_alias
+
+      sql, _ = scoped.to_sql
+      sql.should contain(%("contracts"."reference" AS "ref"))
+    end
   end
 
   describe "query methods" do
@@ -193,6 +207,51 @@ describe Quo::Relation do
 
       sql, _ = relation.to_sql
       sql.should start_with(%(SELECT DISTINCT))
+    end
+
+    it "allows selecting columns with aliases using t() helper" do
+      relation = TestContractsRelation.new(test_adapter)
+        .select(t(:contracts)[:reference].aliased(:ref))
+
+      sql, _ = relation.to_sql
+      sql.should contain(%("contracts"."reference" AS "ref"))
+    end
+
+    it "allows mixing regular and aliased columns with t() helper" do
+      relation = TestContractsRelation.new(test_adapter)
+        .select(
+          t(:contracts)[:id],
+          t(:contracts)[:reference].aliased(:ref),
+          t(:contracts)[:status].aliased(:state)
+        )
+
+      sql, _ = relation.to_sql
+      sql.should contain(%("contracts"."id"))
+      sql.should contain(%("contracts"."reference" AS "ref"))
+      sql.should contain(%("contracts"."status" AS "state"))
+    end
+
+    it "allows aliasing columns from joined tables using t() helper" do
+      relation = TestContractsRelation.new(test_adapter)
+        .join(:users, on: {contracts: :user_id, eq: {users: :id}})
+        .select(
+          t(:contracts)[:reference].aliased(:contract_ref),
+          t(:users)[:name].aliased(:user_name)
+        )
+
+      sql, _ = relation.to_sql
+      sql.should contain(%("contracts"."reference" AS "contract_ref"))
+      sql.should contain(%("users"."name" AS "user_name"))
+    end
+
+    it "can combine hash-based select with aliased columns using t() helper" do
+      relation = TestContractsRelation.new(test_adapter)
+        .select(contracts: [:id])
+        .select(t(:contracts)[:reference].aliased(:ref))
+
+      sql, _ = relation.to_sql
+      sql.should contain(%("contracts"."id"))
+      sql.should contain(%("contracts"."reference" AS "ref"))
     end
   end
 

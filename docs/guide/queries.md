@@ -4,6 +4,8 @@ Quo queries are **immutable**. Every method returns a new query, leaving the ori
 
 ## SELECT
 
+### Basic SELECT
+
 Always table-qualified:
 
 ```crystal
@@ -17,6 +19,64 @@ query
 
 # Select all (default when no select specified)
 query  # Generates: SELECT "contracts".*
+```
+
+### SELECT with Column References
+
+When working with Relations, you can use the `t()` helper to create column references. The `t()` helper is available in Relations automatically, or you can include `Quo::ColumnHelpers` in your own code:
+
+```crystal
+# In Relation (t() is automatically available)
+relation
+  .select(
+    t(:users)[:id],
+    t(:users)[:name],
+    t(:users)[:email]
+  )
+
+# In your own code, include the helper module
+include Quo::ColumnHelpers
+
+query.select(t(:users)[:name].aliased(:user_name))
+```
+
+### Aliased Columns
+
+Alias columns using the `.aliased()` method:
+
+```crystal
+# Single aliased column
+relation.select(t(:users)[:name].aliased(:user_name))
+# Generates: SELECT "users"."name" AS "user_name"
+
+# Multiple aliased columns
+relation.select(
+  t(:users)[:name].aliased(:full_name),
+  t(:users)[:email].aliased(:email_address)
+)
+
+# Mix regular and aliased columns
+relation.select(
+  t(:users)[:id],                          # No alias
+  t(:users)[:name].aliased(:user_name),    # Aliased
+  t(:users)[:email].aliased(:contact)      # Aliased
+)
+
+# Alias columns from joined tables
+relation
+  .join(:organizations, on: {users: :org_id, eq: {organizations: :id}})
+  .select(
+    t(:users)[:name].aliased(:user_name),
+    t(:organizations)[:name].aliased(:org_name)
+  )
+```
+
+You can also combine hash-based select with aliased columns:
+
+```crystal
+relation
+  .select(users: [:id])                    # Hash-based
+  .select(t(:users)[:name].aliased(:username))  # Aliased
 ```
 
 ## WHERE

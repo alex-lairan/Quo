@@ -272,7 +272,7 @@ module Quo
           parts << "#{quote_identifier(query.table)}.*"
         else
           query.select_columns.each do |col|
-            parts << "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
+            parts << compile_select_column(col)
           end
         end
 
@@ -282,6 +282,17 @@ module Quo
         end
 
         parts.join(", ")
+      end
+
+      private def compile_select_column(col : SelectColumn) : String
+        case col
+        when ColumnRef
+          "#{quote_identifier(col.table)}.#{quote_identifier(col.column)}"
+        when AliasedColumn
+          "#{quote_identifier(col.table)}.#{quote_identifier(col.original_column)} AS #{quote_identifier(col.alias_name)}"
+        else
+          raise UnsupportedExpressionError.new(col.class.name)
+        end
       end
 
       private def compile_aggregate(agg : Aggregate) : String

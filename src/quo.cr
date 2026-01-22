@@ -31,6 +31,7 @@ end
 require "./quo/value"
 require "./quo/exceptions"
 require "./quo/column_ref"
+require "./quo/column_helpers"
 require "./quo/subquery"
 require "./quo/expression"
 require "./quo/expression_builder"
