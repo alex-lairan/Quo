@@ -14,8 +14,10 @@ module Quo
   struct QueryEvent
     getter sql : String
     getter params : Array(DB::Any)
-    getter duration : Time::Span
-    getter operation : Symbol  # :select, :insert, :update, :delete
+    getter duration : Time::Span          # Total time
+    getter compile_time : Time::Span      # Time to build/compile SQL
+    getter execute_time : Time::Span      # Time to execute at DB
+    getter operation : Symbol             # :select, :insert, :update, :delete
     getter rows_affected : Int64?
     getter error : Exception?
 
@@ -23,6 +25,8 @@ module Quo
       @sql : String,
       @params : Array(DB::Any) = [] of DB::Any,
       @duration : Time::Span = Time::Span.zero,
+      @compile_time : Time::Span = Time::Span.zero,
+      @execute_time : Time::Span = Time::Span.zero,
       @operation : Symbol = :select,
       @rows_affected : Int64? = nil,
       @error : Exception? = nil
@@ -36,20 +40,56 @@ module Quo
     def slow?(threshold : Time::Span) : Bool
       @duration > threshold
     end
+
+    def slow_compile?(threshold : Time::Span) : Bool
+      @compile_time > threshold
+    end
+
+    def slow_execute?(threshold : Time::Span) : Bool
+      @execute_time > threshold
+    end
   end
 
   # Subscriber callback type
   alias QuerySubscriber = QueryEvent ->
 
+  # Custom logger interface
+  # Implement this to use your own logger
+  abstract class Logger
+    abstract def debug(message : String)
+    abstract def info(message : String)
+    abstract def warn(message : String)
+    abstract def error(message : String)
+  end
+
+  # Default STDERR adapter - simple and reliable
+  class StderrLogAdapter < Logger
+    def debug(message : String)
+      STDERR.puts "\e[36m#{Time.utc} DEBUG - #{message}\e[0m"
+    end
+
+    def info(message : String)
+      STDERR.puts "\e[32m#{Time.utc}  INFO - #{message}\e[0m"
+    end
+
+    def warn(message : String)
+      STDERR.puts "\e[33m#{Time.utc}  WARN - #{message}\e[0m"
+    end
+
+    def error(message : String)
+      STDERR.puts "\e[31m#{Time.utc} ERROR - #{message}\e[0m"
+    end
+  end
+
   # Global logging and instrumentation configuration
   module Logging
-    Log = ::Log.for("quo")
-
     @@log_level : LogLevel = LogLevel::None
     @@slow_query_threshold : Time::Span = 100.milliseconds
+    @@slow_compile_threshold : Time::Span = 50.milliseconds
     @@subscribers : Array(QuerySubscriber) = [] of QuerySubscriber
     @@slow_query_handlers : Array(QuerySubscriber) = [] of QuerySubscriber
     @@enabled : Bool = false
+    @@logger : Quo::Logger = StderrLogAdapter.new
 
     # Enable/disable logging
     def self.enabled=(value : Bool)
@@ -79,6 +119,24 @@ module Quo
       @@slow_query_threshold
     end
 
+    # Set slow compile threshold
+    def self.slow_compile_threshold=(threshold : Time::Span)
+      @@slow_compile_threshold = threshold
+    end
+
+    def self.slow_compile_threshold
+      @@slow_compile_threshold
+    end
+
+    # Set custom logger
+    def self.logger=(logger : Quo::Logger)
+      @@logger = logger
+    end
+
+    def self.logger
+      @@logger
+    end
+
     # Subscribe to query events
     def self.subscribe(&block : QuerySubscriber)
       @@subscribers << block
@@ -101,23 +159,37 @@ module Quo
 
       # Format parameters for display
       params_str = event.params.empty? ? "" : " #{format_params(event.params)}"
-      duration_str = "(#{format_duration(event.duration)})"
 
-      message = "[QUO] #{event.sql}#{params_str} #{duration_str}"
+      # Format timing information
+      timing_str = if event.compile_time > Time::Span.zero || event.execute_time > Time::Span.zero
+        compile = format_duration(event.compile_time)
+        execute = format_duration(event.execute_time)
+        total = format_duration(event.duration)
+        "(compile: #{compile}, execute: #{execute}, total: #{total})"
+      else
+        "(#{format_duration(event.duration)})"
+      end
+
+      message = "[QUO] #{event.sql}#{params_str} #{timing_str}"
 
       if err = event.error
         message += " ERROR: #{err.message}"
       end
 
+      # Log slow compile warning
+      if event.slow_compile?(@@slow_compile_threshold)
+        message += " [SLOW COMPILE]"
+      end
+
       case @@log_level
       when LogLevel::Debug
-        Log.debug { message }
+        @@logger.debug(message)
       when LogLevel::Info
-        Log.info { message }
+        @@logger.info(message)
       when LogLevel::Warn
-        Log.warn { message }
+        @@logger.warn(message)
       when LogLevel::Error
-        Log.error { message } if event.error
+        @@logger.error(message) if event.error
       end
 
       # Notify subscribers
@@ -133,7 +205,7 @@ module Quo
       end
     end
 
-    # Wrap a block and log its execution
+    # Wrap a block and log its execution (legacy - no timing breakdown)
     def self.instrument(sql : String, params : Array(DB::Any), operation : Symbol, &block)
       return yield unless @@enabled || !@@subscribers.empty?
 
@@ -158,6 +230,52 @@ module Quo
           sql: sql,
           params: params,
           duration: duration,
+          operation: operation,
+          error: ex
+        )
+        log(event)
+        raise ex
+      end
+    end
+
+    # Instrument with separate compile and execute timing
+    def self.instrument_with_timing(
+      sql : String,
+      params : Array(DB::Any),
+      operation : Symbol,
+      compile_time : Time::Span,
+      &block
+    )
+      return yield unless @@enabled || !@@subscribers.empty?
+
+      execute_start = Time.utc
+      begin
+        result = yield
+        execute_time = Time.utc - execute_start
+        total_duration = compile_time + execute_time
+
+        event = QueryEvent.new(
+          sql: sql,
+          params: params,
+          duration: total_duration,
+          compile_time: compile_time,
+          execute_time: execute_time,
+          operation: operation,
+          rows_affected: result.is_a?(Int64) ? result : nil
+        )
+        log(event)
+
+        result
+      rescue ex
+        execute_time = Time.utc - execute_start
+        total_duration = compile_time + execute_time
+
+        event = QueryEvent.new(
+          sql: sql,
+          params: params,
+          duration: total_duration,
+          compile_time: compile_time,
+          execute_time: execute_time,
           operation: operation,
           error: ex
         )

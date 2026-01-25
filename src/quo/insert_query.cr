@@ -74,16 +74,31 @@ module Quo
 
     # Execute the insert and return number of affected rows
     def execute : Int64
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = to_sql
-      @adapter.execute_insert(sql, params)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :insert, compile_time) do
+        @adapter.execute_insert(sql, params)
+      end
     end
 
     # Execute the insert and return the inserted rows (requires RETURNING)
     # Returns Quo::ResultSet with rich types preserved
     def execute_returning : Quo::ResultSet
       raise QueryError.new("RETURNING clause required for execute_returning") if @returning_columns.empty?
+
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = to_sql
-      @adapter.execute(sql, params)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :insert, compile_time) do
+        @adapter.execute(sql, params)
+      end
     end
 
     # Execute and return first row (useful with RETURNING for single insert)

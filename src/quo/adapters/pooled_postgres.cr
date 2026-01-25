@@ -13,81 +13,69 @@ module Quo
       end
 
       # Execute query and return results with rich PostgreSQL types preserved
-      # Uses pool checkout and logging instrumentation
+      # Uses pool checkout (timing instrumentation is done in Query layer)
       def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
-        Logging.instrument(sql, params, :select) do
-          results = [] of Quo::Row
+        results = [] of Quo::Row
 
-          @pool.checkout do |conn|
-            conn.query(sql, args: params) do |rs|
-              rs.each do
-                row = {} of String => Quo::Value
-                rs.column_count.times do |i|
-                  col_name = rs.column_name(i)
-                  row[col_name] = rs.read
-                end
-                results << row
+        @pool.checkout do |conn|
+          conn.query(sql, args: params) do |rs|
+            rs.each do
+              row = {} of String => Quo::Value
+              rs.column_count.times do |i|
+                col_name = rs.column_name(i)
+                row[col_name] = rs.read
               end
+              results << row
             end
           end
-
-          results
         end
+
+        results
       end
 
       # Execute query and map to type T
       def execute(sql : String, params : Array(DB::Any), as type : T.class) : Array(T) forall T
-        Logging.instrument(sql, params, :select) do
-          result = nil
-          @pool.checkout do |conn|
-            result = conn.query_all(sql, args: params, as: type)
-          end
-          result.not_nil!
+        result = nil
+        @pool.checkout do |conn|
+          result = conn.query_all(sql, args: params, as: type)
         end
+        result.not_nil!
       end
 
       # Execute scalar query
       def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
-        Logging.instrument(sql, params, :select) do
-          result = uninitialized T
-          @pool.checkout do |conn|
-            result = conn.query_one(sql, args: params, as: type)
-          end
-          result
+        result = uninitialized T
+        @pool.checkout do |conn|
+          result = conn.query_one(sql, args: params, as: type)
         end
+        result
       end
 
-      # Execute INSERT and return affected rows
+      # Execute INSERT and return affected rows (timing instrumentation done in InsertQuery layer)
       def execute_insert(sql : String, params : Array(DB::Any)) : Int64
-        Logging.instrument(sql, params, :insert) do
-          rows = 0_i64
-          @pool.checkout do |conn|
-            rows = conn.exec(sql, args: params).rows_affected
-          end
-          rows
+        rows = 0_i64
+        @pool.checkout do |conn|
+          rows = conn.exec(sql, args: params).rows_affected
         end
+        rows
       end
 
-      # Execute UPDATE and return affected rows
+      # Execute UPDATE and return affected rows (timing instrumentation done in UpdateQuery layer)
       def execute_update(sql : String, params : Array(DB::Any)) : Int64
-        Logging.instrument(sql, params, :update) do
-          rows = 0_i64
-          @pool.checkout do |conn|
-            rows = conn.exec(sql, args: params).rows_affected
-          end
-          rows
+        rows = 0_i64
+        @pool.checkout do |conn|
+          rows = conn.exec(sql, args: params).rows_affected
         end
+        rows
       end
 
-      # Execute DELETE and return affected rows
+      # Execute DELETE and return affected rows (timing instrumentation done in DeleteQuery layer)
       def execute_delete(sql : String, params : Array(DB::Any)) : Int64
-        Logging.instrument(sql, params, :delete) do
-          rows = 0_i64
-          @pool.checkout do |conn|
-            rows = conn.exec(sql, args: params).rows_affected
-          end
-          rows
+        rows = 0_i64
+        @pool.checkout do |conn|
+          rows = conn.exec(sql, args: params).rows_affected
         end
+        rows
       end
 
       # Execute a block within a database transaction

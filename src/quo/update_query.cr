@@ -74,16 +74,31 @@ module Quo
 
     # Execute the update and return number of affected rows
     def execute : Int64
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = to_sql
-      @adapter.execute_update(sql, params)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :update, compile_time) do
+        @adapter.execute_update(sql, params)
+      end
     end
 
     # Execute the update and return the updated rows (requires RETURNING)
     # Returns Quo::ResultSet with rich types preserved
     def execute_returning : Quo::ResultSet
       raise QueryError.new("RETURNING clause required for execute_returning") if @returning_columns.empty?
+
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = to_sql
-      @adapter.execute(sql, params)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :update, compile_time) do
+        @adapter.execute(sql, params)
+      end
     end
 
     # Debug output

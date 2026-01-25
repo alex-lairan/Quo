@@ -333,14 +333,28 @@ module Quo
     # Execute query and return results
     # Returns Quo::ResultSet with rich types preserved (UUID, PG::Numeric, etc.)
     def to_a : Quo::ResultSet
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = to_sql
-      @adapter.execute(sql, params)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :select, compile_time) do
+        @adapter.execute(sql, params)
+      end
     end
 
     # Execute query and map to type T
     def to_a(as type : T.class) : Array(T) forall T
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = to_sql
-      @adapter.execute(sql, params, as: type)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :select, compile_time) do
+        @adapter.execute(sql, params, as: type)
+      end
     end
 
     # Get first result or nil
@@ -371,8 +385,15 @@ module Quo
 
     # Count matching rows
     def count : Int64
+      # Measure compile time
+      compile_start = Time.utc
       sql, params = count_sql
-      @adapter.execute_scalar(sql, params, as: Int64)
+      compile_time = Time.utc - compile_start
+
+      # Execute with timing
+      Logging.instrument_with_timing(sql, params, :select, compile_time) do
+        @adapter.execute_scalar(sql, params, as: Int64)
+      end
     end
 
     # Check if any matching rows exist
