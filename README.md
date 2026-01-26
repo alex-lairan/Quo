@@ -261,15 +261,19 @@ relation.where(users: {active: "yes"})
 - [Logging & Instrumentation](docs/guide/logging.md)
 - [Query Caching](docs/guide/caching.md)
 - [Database Adapters](docs/guide/adapters.md)
+- [Multi-Database](docs/guide/multi-database.md)
 - [Introspection](docs/guide/introspection.md)
+- [Validation](docs/guide/validation.md)
 
 ## Examples
 
 Check out the [examples](examples/) directory for complete working examples:
 
 - [demo.cr](examples/demo.cr) - Basic usage with relations and scopes
+- [demo_sqlite.cr](examples/demo_sqlite.cr) - SQLite-specific examples
+- [example_advanced_pg.cr](examples/example_advanced_pg.cr) - Advanced PostgreSQL features
+- [example_introspection_pg.cr](examples/example_introspection_pg.cr) - Database introspection examples
 - [logging_example.cr](examples/logging_example.cr) - Query logging and instrumentation
-- [repository_example.cr](examples/repository_example.cr) - Repository pattern with entity mapping
 
 ## Requirements
 
