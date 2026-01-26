@@ -9,9 +9,6 @@ docs/.vitepress/dist
 docs/.vitepress/cache
 node_modules/
 
-# npm
-package-lock.json
-
 # IDE
 .idea/
 .vscode/
