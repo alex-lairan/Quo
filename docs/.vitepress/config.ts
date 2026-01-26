@@ -138,7 +138,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/alex-lairan/Quo/edit/main/docs/:path',
+      pattern: 'https://github.com/alex-lairan/Quo/edit/master/docs/:path',
       text: 'Edit this page on GitHub'
     },
 
