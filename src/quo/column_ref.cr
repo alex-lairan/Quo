@@ -35,32 +35,32 @@ module Quo
 
     # Equality comparison: column = value
     def ==(value) : Eq
-      Eq.new(self, value.as(DB::Any))
+      Eq.new(self, value.as(Quo::Value))
     end
 
     # Inequality comparison: column != value
     def !=(value) : NotEq
-      NotEq.new(self, value.as(DB::Any))
+      NotEq.new(self, value.as(Quo::Value))
     end
 
     # Greater than: column > value
     def >(value) : Gt
-      Gt.new(self, value.as(DB::Any))
+      Gt.new(self, value.as(Quo::Value))
     end
 
     # Greater than or equal: column >= value
     def >=(value) : Gte
-      Gte.new(self, value.as(DB::Any))
+      Gte.new(self, value.as(Quo::Value))
     end
 
     # Less than: column < value
     def <(value) : Lt
-      Lt.new(self, value.as(DB::Any))
+      Lt.new(self, value.as(Quo::Value))
     end
 
     # Less than or equal: column <= value
     def <=(value) : Lte
-      Lte.new(self, value.as(DB::Any))
+      Lte.new(self, value.as(Quo::Value))
     end
 
     # Pattern matching: column LIKE pattern
@@ -75,12 +75,12 @@ module Quo
 
     # Set membership: column IN (values)
     def in(values : Array) : In
-      In.new(self, values.map { |v| v.as(DB::Any) })
+      In.new(self, values.map { |v| v.as(Quo::Value) })
     end
 
     # Range check: column BETWEEN min AND max
     def between(min, max) : Between
-      Between.new(self, min.as(DB::Any), max.as(DB::Any))
+      Between.new(self, min.as(Quo::Value), max.as(Quo::Value))
     end
 
     # Null check: column IS NULL

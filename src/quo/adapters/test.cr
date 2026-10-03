@@ -8,15 +8,15 @@ module Quo
       end
 
       # Override execute methods to raise error - tests should use to_sql
-      def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
+      def execute(sql : String, params : Array(Quo::Value)) : Quo::ResultSet
         raise AdapterError.new("TestAdapter does not support query execution. Use to_sql for SQL generation tests.")
       end
 
-      def execute(sql : String, params : Array(DB::Any), as type : T.class) : Array(T) forall T
+      def execute(sql : String, params : Array(Quo::Value), as type : T.class) : Array(T) forall T
         raise AdapterError.new("TestAdapter does not support query execution. Use to_sql for SQL generation tests.")
       end
 
-      def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
+      def execute_scalar(sql : String, params : Array(Quo::Value), as type : T.class) : T forall T
         raise AdapterError.new("TestAdapter does not support query execution. Use to_sql for SQL generation tests.")
       end
     end

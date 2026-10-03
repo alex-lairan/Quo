@@ -109,7 +109,7 @@ module Quo
       conditions.each do |table, hash|
         hash.each do |column, value|
           col_ref = ColumnRef.new(table, column)
-          new_clauses << Eq.new(col_ref, value.as(DB::Any))
+          new_clauses << Eq.new(col_ref, value.as(Quo::Value))
         end
       end
       copy_with(where_clauses: @where_clauses + new_clauses)
@@ -320,12 +320,12 @@ module Quo
     end
 
     # Generate SQL and parameters tuple
-    def to_sql : {String, Array(DB::Any)}
+    def to_sql : {String, Array(Quo::Value)}
       @adapter.compile(self)
     end
 
     # Generate COUNT SQL
-    def count_sql : {String, Array(DB::Any)}
+    def count_sql : {String, Array(Quo::Value)}
       @adapter.compile_count(self)
     end
 

@@ -75,7 +75,7 @@ module Quo
       end
 
       # Generate cache key from SQL and parameters
-      def cache_key(sql : String, params : Array(DB::Any)) : String
+      def cache_key(sql : String, params : Array(Quo::Value)) : String
         content = "#{sql}:#{params.map(&.to_s).join(",")}"
         "quo:query:#{content.hash}"
       end
@@ -116,7 +116,7 @@ module Quo
       # Fetch using SQL and params as key
       def fetch_query(
         sql : String,
-        params : Array(DB::Any),
+        params : Array(Quo::Value),
         ttl : Time::Span? = nil,
         tags : Array(String) = [] of String,
         &block : -> Quo::ResultSet

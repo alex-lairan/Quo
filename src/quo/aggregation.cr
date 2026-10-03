@@ -70,7 +70,7 @@ module Quo
   # Aggregate comparison: aggregate > value
   class AggregateGt
     getter aggregate : Aggregate
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@aggregate, @value)
     end
@@ -87,7 +87,7 @@ module Quo
   # Aggregate comparison: aggregate >= value
   class AggregateGte
     getter aggregate : Aggregate
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@aggregate, @value)
     end
@@ -104,7 +104,7 @@ module Quo
   # Aggregate comparison: aggregate < value
   class AggregateLt
     getter aggregate : Aggregate
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@aggregate, @value)
     end
@@ -121,7 +121,7 @@ module Quo
   # Aggregate comparison: aggregate <= value
   class AggregateLte
     getter aggregate : Aggregate
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@aggregate, @value)
     end
@@ -138,7 +138,7 @@ module Quo
   # Aggregate comparison: aggregate = value
   class AggregateEq
     getter aggregate : Aggregate
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@aggregate, @value)
     end
@@ -155,7 +155,7 @@ module Quo
   # Aggregate comparison: aggregate != value
   class AggregateNotEq
     getter aggregate : Aggregate
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@aggregate, @value)
     end
@@ -172,8 +172,8 @@ module Quo
   # Aggregate range: aggregate BETWEEN min AND max
   class AggregateBetween
     getter aggregate : Aggregate
-    getter min : DB::Any
-    getter max : DB::Any
+    getter min : Quo::Value
+    getter max : Quo::Value
 
     def initialize(@aggregate, @min, @max)
     end

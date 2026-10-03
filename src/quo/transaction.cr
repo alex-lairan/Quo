@@ -42,12 +42,12 @@ module Quo
     end
 
     # Execute raw SQL within the transaction
-    def execute(sql : String, params : Array(DB::Any) = [] of DB::Any) : Array(Hash(String, DB::Any))
+    def execute(sql : String, params : Array(Quo::Value) = [] of Quo::Value) : ResultSet
       @adapter.execute(sql, params)
     end
 
     # Execute raw SQL and return scalar value
-    def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
+    def execute_scalar(sql : String, params : Array(Quo::Value), as type : T.class) : T forall T
       @adapter.execute_scalar(sql, params, as: type)
     end
 

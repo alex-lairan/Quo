@@ -5,7 +5,7 @@ module Quo
   # Comparison expression: column = value
   class Eq
     getter column : ColumnRef
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@column, @value)
     end
@@ -24,7 +24,7 @@ module Quo
   # Comparison expression: column != value
   class NotEq
     getter column : ColumnRef
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@column, @value)
     end
@@ -41,7 +41,7 @@ module Quo
   # Comparison expression: column > value
   class Gt
     getter column : ColumnRef
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@column, @value)
     end
@@ -58,7 +58,7 @@ module Quo
   # Comparison expression: column >= value
   class Gte
     getter column : ColumnRef
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@column, @value)
     end
@@ -75,7 +75,7 @@ module Quo
   # Comparison expression: column < value
   class Lt
     getter column : ColumnRef
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@column, @value)
     end
@@ -92,7 +92,7 @@ module Quo
   # Comparison expression: column <= value
   class Lte
     getter column : ColumnRef
-    getter value : DB::Any
+    getter value : Quo::Value
 
     def initialize(@column, @value)
     end
@@ -143,7 +143,7 @@ module Quo
   # Set membership: column IN (values)
   class In
     getter column : ColumnRef
-    getter values : Array(DB::Any)
+    getter values : Array(Quo::Value)
 
     def initialize(@column, @values)
     end
@@ -160,8 +160,8 @@ module Quo
   # Range check: column BETWEEN min AND max
   class Between
     getter column : ColumnRef
-    getter min : DB::Any
-    getter max : DB::Any
+    getter min : Quo::Value
+    getter max : Quo::Value
 
     def initialize(@column, @min, @max)
     end
@@ -260,9 +260,9 @@ module Quo
   # Raw SQL escape hatch
   class Raw
     getter sql : String
-    getter params : Array(DB::Any)
+    getter params : Array(Quo::Value)
 
-    def initialize(@sql, @params = [] of DB::Any)
+    def initialize(@sql, @params = [] of Quo::Value)
     end
 
     def &(other : Expression) : And

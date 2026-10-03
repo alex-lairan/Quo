@@ -25,7 +25,11 @@ module Quo
     macro schema(table_name, &block)
       @@table : Symbol = {{table_name}}
       @@schema_definition : Quo::Schema = Quo::Schema.build({{table_name}}) do
-        {{block.body}}
+        {% if block.is_a?(Nop) %}
+          # Empty block
+        {% else %}
+          {{block.body}}
+        {% end %}
       end
 
       # Register schema in the global registry for cross-table validation
@@ -112,7 +116,7 @@ module Quo
       # Validate columns and type check values
       conditions.each do |table, hash|
         hash.each do |column, value|
-          SchemaRegistry.validate_column_value!(table, column, value.as(DB::Any))
+          SchemaRegistry.validate_column_value!(table, column, value.as(Quo::Value))
         end
       end
       with_query(@query.where(**conditions))
@@ -201,12 +205,12 @@ module Quo
     end
 
     # Terminal: get SQL and params
-    def to_sql : {String, Array(DB::Any)}
+    def to_sql : {String, Array(Quo::Value)}
       @query.to_sql
     end
 
     # Terminal: get COUNT SQL and params
-    def count_sql : {String, Array(DB::Any)}
+    def count_sql : {String, Array(Quo::Value)}
       @query.count_sql
     end
 

@@ -3,10 +3,10 @@ module Quo
     # Abstract base adapter - defines the interface for SQL generation and execution
     abstract class Adapter
       # Compile a Query into SQL string and parameters
-      abstract def compile(query : Query) : {String, Array(DB::Any)}
+      abstract def compile(query : Query) : {String, Array(Quo::Value)}
 
       # Compile a COUNT query
-      abstract def compile_count(query : Query) : {String, Array(DB::Any)}
+      abstract def compile_count(query : Query) : {String, Array(Quo::Value)}
 
       # Quote an identifier (table or column name)
       abstract def quote_identifier(name : Symbol) : String
@@ -16,46 +16,46 @@ module Quo
 
       # Execute a query and return results as array of hashes
       # Returns Quo::ResultSet which preserves rich types (UUID, PG::Numeric, etc.)
-      abstract def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
+      abstract def execute(sql : String, params : Array(Quo::Value)) : Quo::ResultSet
 
       # Execute a query and map results to type T
       # Note: This needs to be implemented as a non-abstract method with generics
-      def execute(sql : String, params : Array(DB::Any), as type : T.class) : Array(T) forall T
+      def execute(sql : String, params : Array(Quo::Value), as type : T.class) : Array(T) forall T
         raise AdapterError.new("Not implemented")
       end
 
       # Execute a scalar query (e.g., COUNT)
-      def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
+      def execute_scalar(sql : String, params : Array(Quo::Value), as type : T.class) : T forall T
         raise AdapterError.new("Not implemented")
       end
 
       # Compile an InsertQuery into SQL string and parameters
-      def compile_insert(query : InsertQuery) : {String, Array(DB::Any)}
+      def compile_insert(query : InsertQuery) : {String, Array(Quo::Value)}
         raise AdapterError.new("Not implemented")
       end
 
       # Compile an UpdateQuery into SQL string and parameters
-      def compile_update(query : UpdateQuery) : {String, Array(DB::Any)}
+      def compile_update(query : UpdateQuery) : {String, Array(Quo::Value)}
         raise AdapterError.new("Not implemented")
       end
 
       # Compile a DeleteQuery into SQL string and parameters
-      def compile_delete(query : DeleteQuery) : {String, Array(DB::Any)}
+      def compile_delete(query : DeleteQuery) : {String, Array(Quo::Value)}
         raise AdapterError.new("Not implemented")
       end
 
       # Execute an INSERT and return number of affected rows
-      def execute_insert(sql : String, params : Array(DB::Any)) : Int64
+      def execute_insert(sql : String, params : Array(Quo::Value)) : Int64
         raise AdapterError.new("Not implemented")
       end
 
       # Execute an UPDATE and return number of affected rows
-      def execute_update(sql : String, params : Array(DB::Any)) : Int64
+      def execute_update(sql : String, params : Array(Quo::Value)) : Int64
         raise AdapterError.new("Not implemented")
       end
 
       # Execute a DELETE and return number of affected rows
-      def execute_delete(sql : String, params : Array(DB::Any)) : Int64
+      def execute_delete(sql : String, params : Array(Quo::Value)) : Int64
         raise AdapterError.new("Not implemented")
       end
 

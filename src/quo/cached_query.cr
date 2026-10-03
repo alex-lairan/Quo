@@ -149,12 +149,12 @@ module Quo
     end
 
     # Get the underlying SQL (not cached)
-    def to_sql : {String, Array(DB::Any)}
+    def to_sql : {String, Array(Quo::Value)}
       @query.to_sql
     end
 
     # Get count SQL (not cached)
-    def count_sql : {String, Array(DB::Any)}
+    def count_sql : {String, Array(Quo::Value)}
       @query.count_sql
     end
 

@@ -3,7 +3,7 @@ module Quo
   # Each method returns a new UpdateQuery instance, leaving the original unchanged
   class UpdateQuery
     getter table : Symbol
-    getter set_values : Hash(Symbol, DB::Any)
+    getter set_values : Hash(Symbol, Quo::Value)
     getter where_clauses : Array(Expression)
     getter returning_columns : Array(ColumnRef)
 
@@ -12,7 +12,7 @@ module Quo
     def initialize(
       @table : Symbol,
       @adapter : Adapters::Adapter,
-      @set_values : Hash(Symbol, DB::Any) = {} of Symbol => DB::Any,
+      @set_values : Hash(Symbol, Quo::Value) = {} of Symbol => Quo::Value,
       @where_clauses : Array(Expression) = [] of Expression,
       @returning_columns : Array(ColumnRef) = [] of ColumnRef
     )
@@ -23,13 +23,13 @@ module Quo
     def set(**columns) : UpdateQuery
       new_values = @set_values.dup
       columns.each do |key, value|
-        new_values[key] = value.as(DB::Any)
+        new_values[key] = value.as(Quo::Value)
       end
       copy_with(set_values: new_values)
     end
 
     # SET from hash
-    def set(columns : Hash(Symbol, DB::Any)) : UpdateQuery
+    def set(columns : Hash(Symbol, Quo::Value)) : UpdateQuery
       new_values = @set_values.merge(columns)
       copy_with(set_values: new_values)
     end
@@ -41,7 +41,7 @@ module Quo
       conditions.each do |table, hash|
         hash.each do |column, value|
           col_ref = ColumnRef.new(table, column)
-          new_clauses << Eq.new(col_ref, value.as(DB::Any))
+          new_clauses << Eq.new(col_ref, value.as(Quo::Value))
         end
       end
       copy_with(where_clauses: @where_clauses + new_clauses)
@@ -68,7 +68,7 @@ module Quo
     end
 
     # Generate SQL and parameters tuple
-    def to_sql : {String, Array(DB::Any)}
+    def to_sql : {String, Array(Quo::Value)}
       @adapter.compile_update(self)
     end
 
@@ -112,7 +112,7 @@ module Quo
     end
 
     private def copy_with(
-      set_values : Hash(Symbol, DB::Any) = @set_values,
+      set_values : Hash(Symbol, Quo::Value) = @set_values,
       where_clauses : Array(Expression) = @where_clauses,
       returning_columns : Array(ColumnRef) = @returning_columns
     ) : UpdateQuery

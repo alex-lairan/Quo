@@ -66,8 +66,8 @@ module Quo
       # Build returning columns directly
       returning_cols = returning.map { |col| ColumnRef.new(table, col) }
       # Build values hash
-      vals = {} of Symbol => DB::Any
-      values.each { |k, v| vals[k] = v.as(DB::Any) }
+      vals = {} of Symbol => Quo::Value
+      values.each { |k, v| vals[k] = v.as(Quo::Value) }
       # Create query with returning columns
       InsertQuery.new(
         table: table,
@@ -87,11 +87,11 @@ module Quo
       where_clauses = [] of Expression
       where.each do |column, value|
         col_ref = ColumnRef.new(table, column)
-        where_clauses << Eq.new(col_ref, value.as(DB::Any))
+        where_clauses << Eq.new(col_ref, value.as(Quo::Value))
       end
       # Build set values
-      set_values = {} of Symbol => DB::Any
-      values.each { |k, v| set_values[k] = v.as(DB::Any) }
+      set_values = {} of Symbol => Quo::Value
+      values.each { |k, v| set_values[k] = v.as(Quo::Value) }
       # Create query
       UpdateQuery.new(
         table: table,
@@ -111,7 +111,7 @@ module Quo
       where_clauses = [] of Expression
       where.each do |column, value|
         col_ref = ColumnRef.new(table, column)
-        where_clauses << Eq.new(col_ref, value.as(DB::Any))
+        where_clauses << Eq.new(col_ref, value.as(Quo::Value))
       end
       # Create query
       DeleteQuery.new(
@@ -181,7 +181,7 @@ module Quo
     #
     # Example:
     #   execute("SELECT * FROM users WHERE status = $1", [1])
-    def execute(sql : String, params : Array(DB::Any) = [] of DB::Any) : ResultSet
+    def execute(sql : String, params : Array(Quo::Value) = [] of Quo::Value) : ResultSet
       @adapter.execute(sql, params)
     end
 
@@ -189,7 +189,7 @@ module Quo
     #
     # Example:
     #   execute_one("SELECT * FROM users WHERE id = $1", [123])
-    def execute_one(sql : String, params : Array(DB::Any) = [] of DB::Any) : Row?
+    def execute_one(sql : String, params : Array(Quo::Value) = [] of Quo::Value) : Row?
       @adapter.execute(sql, params).first?
     end
 

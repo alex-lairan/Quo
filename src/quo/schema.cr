@@ -72,7 +72,7 @@ module Quo
     end
 
     # Define a regular column
-    def column(name : Symbol, type : T.class, nullable : Bool = false, default : DB::Any? = nil) forall T
+    def column(name : Symbol, type : T.class, nullable : Bool = false, default : Quo::Value? = nil) forall T
       @columns[name] = Column.new(name, T.to_s, nullable: nullable, default: default)
     end
 

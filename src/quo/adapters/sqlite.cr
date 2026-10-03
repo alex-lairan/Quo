@@ -15,8 +15,8 @@ module Quo
       end
 
       # Compile a Query into SQL and parameters
-      def compile(query : Query) : {String, Array(DB::Any)}
-        params = [] of DB::Any
+      def compile(query : Query) : {String, Array(Quo::Value)}
+        params = [] of Quo::Value
 
         sql = String.build do |str|
           # WITH clause (CTEs)
@@ -97,14 +97,14 @@ module Quo
           if limit = query.limit_value
             str << " LIMIT "
             str << placeholder
-            params << limit.as(DB::Any)
+            params << limit.as(Quo::Value)
           end
 
           # OFFSET clause
           if offset = query.offset_value
             str << " OFFSET "
             str << placeholder
-            params << offset.as(DB::Any)
+            params << offset.as(Quo::Value)
           end
 
           # Set operations (UNION, INTERSECT, EXCEPT)
@@ -130,8 +130,8 @@ module Quo
       end
 
       # Compile a query for use in a set operation
-      private def compile_for_set_operation(query : Query) : {String, Array(DB::Any)}
-        params = [] of DB::Any
+      private def compile_for_set_operation(query : Query) : {String, Array(Quo::Value)}
+        params = [] of Quo::Value
 
         sql = String.build do |str|
           # SELECT clause
@@ -181,8 +181,8 @@ module Quo
       end
 
       # Compile COUNT query
-      def compile_count(query : Query) : {String, Array(DB::Any)}
-        params = [] of DB::Any
+      def compile_count(query : Query) : {String, Array(Quo::Value)}
+        params = [] of Quo::Value
 
         sql = String.build do |str|
           str << "SELECT COUNT(*) FROM "
@@ -220,7 +220,7 @@ module Quo
 
       # Execute query and return results as hash array
       # Execute query and return results
-      def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
+      def execute(sql : String, params : Array(Quo::Value)) : Quo::ResultSet
         connection = @connection || raise AdapterError.new("No database connection")
         results = [] of Quo::Row
 
@@ -241,13 +241,13 @@ module Quo
       end
 
       # Execute query and map to type T
-      def execute(sql : String, params : Array(DB::Any), as type : T.class) : Array(T) forall T
+      def execute(sql : String, params : Array(Quo::Value), as type : T.class) : Array(T) forall T
         connection = @connection || raise AdapterError.new("No database connection")
         connection.query_all(sql, args: params, as: type)
       end
 
       # Execute scalar query
-      def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
+      def execute_scalar(sql : String, params : Array(Quo::Value), as type : T.class) : T forall T
         connection = @connection || raise AdapterError.new("No database connection")
         connection.query_one(sql, args: params, as: type)
       end
@@ -314,7 +314,7 @@ module Quo
         end.join(", ")
       end
 
-      private def compile_having_expression(expr : HavingExpression) : {String, Array(DB::Any)}
+      private def compile_having_expression(expr : HavingExpression) : {String, Array(Quo::Value)}
         case expr
         when AggregateGt
           agg_sql = compile_aggregate_for_having(expr.aggregate)
@@ -388,10 +388,10 @@ module Quo
         "#{quote_identifier(cond.right_table)}.#{quote_identifier(cond.right_column)}"
       end
 
-      private def compile_expression(expr : Expression) : {String, Array(DB::Any)}
+      private def compile_expression(expr : Expression) : {String, Array(Quo::Value)}
         case expr
         when ColumnRef
-          {compile_column(expr), [] of DB::Any}
+          {compile_column(expr), [] of Quo::Value}
         when Eq
           {"#{compile_column(expr.column)} = #{placeholder}", [expr.value]}
         when NotEq
@@ -405,19 +405,19 @@ module Quo
         when Lte
           {"#{compile_column(expr.column)} <= #{placeholder}", [expr.value]}
         when Like
-          {"#{compile_column(expr.column)} LIKE #{placeholder}", [expr.pattern.as(DB::Any)]}
+          {"#{compile_column(expr.column)} LIKE #{placeholder}", [expr.pattern.as(Quo::Value)]}
         when ILike
           # SQLite doesn't have ILIKE, use LOWER() on both sides
-          {"LOWER(#{compile_column(expr.column)}) LIKE LOWER(#{placeholder})", [expr.pattern.as(DB::Any)]}
+          {"LOWER(#{compile_column(expr.column)}) LIKE LOWER(#{placeholder})", [expr.pattern.as(Quo::Value)]}
         when In
           placeholders = expr.values.map { placeholder }.join(", ")
           {"#{compile_column(expr.column)} IN (#{placeholders})", expr.values}
         when Between
           {"#{compile_column(expr.column)} BETWEEN #{placeholder} AND #{placeholder}", [expr.min, expr.max]}
         when IsNull
-          {"#{compile_column(expr.column)} IS NULL", [] of DB::Any}
+          {"#{compile_column(expr.column)} IS NULL", [] of Quo::Value}
         when IsNotNull
-          {"#{compile_column(expr.column)} IS NOT NULL", [] of DB::Any}
+          {"#{compile_column(expr.column)} IS NOT NULL", [] of Quo::Value}
         when And
           left_sql, left_params = compile_expression(expr.left)
           right_sql, right_params = compile_expression(expr.right)
@@ -475,12 +475,12 @@ module Quo
       end
 
       # Compile INSERT query
-      def compile_insert(query : InsertQuery) : {String, Array(DB::Any)}
+      def compile_insert(query : InsertQuery) : {String, Array(Quo::Value)}
         raise QueryError.new("INSERT requires at least one row of values") if query.values_list.empty?
 
         # SQLite 3.35+ supports RETURNING, but we'll keep it compatible with older versions
         # If RETURNING is specified, warn that it may not work on older SQLite versions
-        params = [] of DB::Any
+        params = [] of Quo::Value
 
         # Get all unique columns from all rows
         all_columns = query.values_list.flat_map(&.keys).uniq
@@ -517,17 +517,17 @@ module Quo
       end
 
       # Execute INSERT and return affected rows
-      def execute_insert(sql : String, params : Array(DB::Any)) : Int64
+      def execute_insert(sql : String, params : Array(Quo::Value)) : Int64
         connection = @connection || raise AdapterError.new("No database connection")
         result = connection.exec(sql, args: params)
         result.rows_affected
       end
 
       # Compile UPDATE query
-      def compile_update(query : UpdateQuery) : {String, Array(DB::Any)}
+      def compile_update(query : UpdateQuery) : {String, Array(Quo::Value)}
         raise QueryError.new("UPDATE requires at least one SET value") if query.set_values.empty?
 
-        params = [] of DB::Any
+        params = [] of Quo::Value
 
         sql = String.build do |str|
           str << "UPDATE "
@@ -563,15 +563,15 @@ module Quo
       end
 
       # Execute UPDATE and return affected rows
-      def execute_update(sql : String, params : Array(DB::Any)) : Int64
+      def execute_update(sql : String, params : Array(Quo::Value)) : Int64
         connection = @connection || raise AdapterError.new("No database connection")
         result = connection.exec(sql, args: params)
         result.rows_affected
       end
 
       # Compile DELETE query
-      def compile_delete(query : DeleteQuery) : {String, Array(DB::Any)}
-        params = [] of DB::Any
+      def compile_delete(query : DeleteQuery) : {String, Array(Quo::Value)}
+        params = [] of Quo::Value
 
         sql = String.build do |str|
           str << "DELETE FROM "
@@ -599,7 +599,7 @@ module Quo
       end
 
       # Execute DELETE and return affected rows
-      def execute_delete(sql : String, params : Array(DB::Any)) : Int64
+      def execute_delete(sql : String, params : Array(Quo::Value)) : Int64
         connection = @connection || raise AdapterError.new("No database connection")
         result = connection.exec(sql, args: params)
         result.rows_affected

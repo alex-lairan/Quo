@@ -5,14 +5,14 @@ module Quo
     getter type_name : String
     getter? primary_key : Bool
     getter? nullable : Bool
-    getter default : DB::Any?
+    getter default : Quo::Value?
 
     def initialize(
       @name : Symbol,
       @type_name : String,
       @primary_key : Bool = false,
       @nullable : Bool = false,
-      @default : DB::Any? = nil
+      @default : Quo::Value? = nil
     )
     end
 

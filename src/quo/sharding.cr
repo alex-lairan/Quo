@@ -4,13 +4,13 @@ module Quo
   # Abstract sharding strategy
   # Determines which shard a key should be routed to
   abstract class ShardingStrategy
-    abstract def shard_for(key_value : DB::Any, shard_count : Int32) : Int32
+    abstract def shard_for(key_value : Quo::Value, shard_count : Int32) : Int32
   end
 
   # Modulo-based sharding (hash % shard_count)
   # Distributes keys evenly across shards
   class ModuloSharding < ShardingStrategy
-    def shard_for(key_value : DB::Any, shard_count : Int32) : Int32
+    def shard_for(key_value : Quo::Value, shard_count : Int32) : Int32
       hash = case key_value
              when Int32, Int64
                key_value.to_i64.abs
@@ -32,7 +32,7 @@ module Quo
     def initialize(@ranges : Array({Int64, Int64, Int32}))
     end
 
-    def shard_for(key_value : DB::Any, shard_count : Int32) : Int32
+    def shard_for(key_value : Quo::Value, shard_count : Int32) : Int32
       value = case key_value
               when Int32 then key_value.to_i64
               when Int64 then key_value
@@ -72,7 +72,7 @@ module Quo
       @ring.sort_by! { |h, _| h }
     end
 
-    def shard_for(key_value : DB::Any, shard_count : Int32) : Int32
+    def shard_for(key_value : Quo::Value, shard_count : Int32) : Int32
       hash = hash_key(key_value.to_s)
 
       # Binary search for the first node with hash >= key hash
@@ -134,13 +134,13 @@ module Quo
     end
 
     # Get database for a specific shard key value
-    def for_key(key_value : DB::Any) : Database
+    def for_key(key_value : Quo::Value) : Database
       shard_id = @strategy.shard_for(key_value, @shards.size)
       @shards[shard_id]
     end
 
     # Execute block on the shard for the given key
-    def on_shard(key_value : DB::Any, &block : Database ->)
+    def on_shard(key_value : Quo::Value, &block : Database ->)
       db = for_key(key_value)
       yield db
     end

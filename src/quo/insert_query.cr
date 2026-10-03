@@ -3,7 +3,7 @@ module Quo
   # Each method returns a new InsertQuery instance, leaving the original unchanged
   class InsertQuery
     getter table : Symbol
-    getter values_list : Array(Hash(Symbol, DB::Any))
+    getter values_list : Array(Hash(Symbol, Quo::Value))
     getter returning_columns : Array(ColumnRef)
 
     @adapter : Adapters::Adapter
@@ -11,7 +11,7 @@ module Quo
     def initialize(
       @table : Symbol,
       @adapter : Adapters::Adapter,
-      @values_list : Array(Hash(Symbol, DB::Any)) = [] of Hash(Symbol, DB::Any),
+      @values_list : Array(Hash(Symbol, Quo::Value)) = [] of Hash(Symbol, Quo::Value),
       @returning_columns : Array(ColumnRef) = [] of ColumnRef
     )
     end
@@ -19,37 +19,37 @@ module Quo
     # Set values to insert (single row)
     # Example: .values(name: "Alice", email: "alice@example.com")
     def values(**columns) : InsertQuery
-      row = {} of Symbol => DB::Any
+      row = {} of Symbol => Quo::Value
       columns.each do |key, value|
-        row[key] = value.as(DB::Any)
+        row[key] = value.as(Quo::Value)
       end
       copy_with(values_list: @values_list + [row])
     end
 
     # Set values to insert from hash
-    def values(columns : Hash(Symbol, DB::Any)) : InsertQuery
+    def values(columns : Hash(Symbol, Quo::Value)) : InsertQuery
       copy_with(values_list: @values_list + [columns])
     end
 
     # Set values to insert from NamedTuple
     def values(columns : NamedTuple) : InsertQuery
-      row = {} of Symbol => DB::Any
+      row = {} of Symbol => Quo::Value
       columns.each do |key, value|
-        row[key] = value.as(DB::Any)
+        row[key] = value.as(Quo::Value)
       end
       copy_with(values_list: @values_list + [row])
     end
 
     # Insert multiple rows at once
     # Example: .values_many([{name: "Alice"}, {name: "Bob"}])
-    def values_many(rows : Array(Hash(Symbol, DB::Any))) : InsertQuery
+    def values_many(rows : Array(Hash(Symbol, Quo::Value))) : InsertQuery
       copy_with(values_list: @values_list + rows)
     end
 
     def values_many(rows : Array(NamedTuple)) : InsertQuery
       converted = rows.map do |row|
-        h = {} of Symbol => DB::Any
-        row.each { |k, v| h[k] = v.as(DB::Any) }
+        h = {} of Symbol => Quo::Value
+        row.each { |k, v| h[k] = v.as(Quo::Value) }
         h
       end
       copy_with(values_list: @values_list + converted)
@@ -68,7 +68,7 @@ module Quo
     end
 
     # Generate SQL and parameters tuple
-    def to_sql : {String, Array(DB::Any)}
+    def to_sql : {String, Array(Quo::Value)}
       @adapter.compile_insert(self)
     end
 
@@ -118,7 +118,7 @@ module Quo
     end
 
     private def copy_with(
-      values_list : Array(Hash(Symbol, DB::Any)) = @values_list,
+      values_list : Array(Hash(Symbol, Quo::Value)) = @values_list,
       returning_columns : Array(ColumnRef) = @returning_columns
     ) : InsertQuery
       InsertQuery.new(

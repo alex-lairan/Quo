@@ -43,37 +43,37 @@ module Quo
 
     # Greater than: COUNT(*) > 5
     def >(value) : AggregateGt
-      AggregateGt.new(@aggregate, value.as(DB::Any))
+      AggregateGt.new(@aggregate, value.as(Quo::Value))
     end
 
     # Greater than or equal: SUM(amount) >= 1000
     def >=(value) : AggregateGte
-      AggregateGte.new(@aggregate, value.as(DB::Any))
+      AggregateGte.new(@aggregate, value.as(Quo::Value))
     end
 
     # Less than: AVG(price) < 50
     def <(value) : AggregateLt
-      AggregateLt.new(@aggregate, value.as(DB::Any))
+      AggregateLt.new(@aggregate, value.as(Quo::Value))
     end
 
     # Less than or equal: MAX(age) <= 65
     def <=(value) : AggregateLte
-      AggregateLte.new(@aggregate, value.as(DB::Any))
+      AggregateLte.new(@aggregate, value.as(Quo::Value))
     end
 
     # Equal: COUNT(*) = 10
     def ==(value) : AggregateEq
-      AggregateEq.new(@aggregate, value.as(DB::Any))
+      AggregateEq.new(@aggregate, value.as(Quo::Value))
     end
 
     # Not equal: COUNT(*) != 0
     def !=(value) : AggregateNotEq
-      AggregateNotEq.new(@aggregate, value.as(DB::Any))
+      AggregateNotEq.new(@aggregate, value.as(Quo::Value))
     end
 
     # Between: SUM(amount) BETWEEN 100 AND 1000
     def between(min, max) : AggregateBetween
-      AggregateBetween.new(@aggregate, min.as(DB::Any), max.as(DB::Any))
+      AggregateBetween.new(@aggregate, min.as(Quo::Value), max.as(Quo::Value))
     end
   end
 end

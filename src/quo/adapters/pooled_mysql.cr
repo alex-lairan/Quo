@@ -14,7 +14,7 @@ module Quo
 
       # Execute query and return results
       # Uses pool checkout and logging instrumentation
-      def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
+      def execute(sql : String, params : Array(Quo::Value)) : Quo::ResultSet
         Logging.instrument(sql, params, :select) do
           results = [] of Quo::Row
 
@@ -37,7 +37,7 @@ module Quo
       end
 
       # Execute query and map to type T
-      def execute(sql : String, params : Array(DB::Any), as type : T.class) : Array(T) forall T
+      def execute(sql : String, params : Array(Quo::Value), as type : T.class) : Array(T) forall T
         Logging.instrument(sql, params, :select) do
           result = nil
           @pool.checkout do |conn|
@@ -48,7 +48,7 @@ module Quo
       end
 
       # Execute scalar query
-      def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
+      def execute_scalar(sql : String, params : Array(Quo::Value), as type : T.class) : T forall T
         Logging.instrument(sql, params, :select) do
           result = uninitialized T
           @pool.checkout do |conn|
@@ -59,7 +59,7 @@ module Quo
       end
 
       # Execute INSERT and return affected rows
-      def execute_insert(sql : String, params : Array(DB::Any)) : Int64
+      def execute_insert(sql : String, params : Array(Quo::Value)) : Int64
         Logging.instrument(sql, params, :insert) do
           rows = 0_i64
           @pool.checkout do |conn|
@@ -70,7 +70,7 @@ module Quo
       end
 
       # Execute UPDATE and return affected rows
-      def execute_update(sql : String, params : Array(DB::Any)) : Int64
+      def execute_update(sql : String, params : Array(Quo::Value)) : Int64
         Logging.instrument(sql, params, :update) do
           rows = 0_i64
           @pool.checkout do |conn|
@@ -81,7 +81,7 @@ module Quo
       end
 
       # Execute DELETE and return affected rows
-      def execute_delete(sql : String, params : Array(DB::Any)) : Int64
+      def execute_delete(sql : String, params : Array(Quo::Value)) : Int64
         Logging.instrument(sql, params, :delete) do
           rows = 0_i64
           @pool.checkout do |conn|
@@ -153,7 +153,7 @@ module Quo
           super(nil)
         end
 
-        def execute(sql : String, params : Array(DB::Any)) : Quo::ResultSet
+        def execute(sql : String, params : Array(Quo::Value)) : Quo::ResultSet
           Logging.instrument(sql, params, :select) do
             results = [] of Quo::Row
 
@@ -173,31 +173,31 @@ module Quo
           end
         end
 
-        def execute(sql : String, params : Array(DB::Any), as type : T.class) : Array(T) forall T
+        def execute(sql : String, params : Array(Quo::Value), as type : T.class) : Array(T) forall T
           Logging.instrument(sql, params, :select) do
             @conn.query_all(sql, args: params, as: type)
           end
         end
 
-        def execute_scalar(sql : String, params : Array(DB::Any), as type : T.class) : T forall T
+        def execute_scalar(sql : String, params : Array(Quo::Value), as type : T.class) : T forall T
           Logging.instrument(sql, params, :select) do
             @conn.query_one(sql, args: params, as: type)
           end
         end
 
-        def execute_insert(sql : String, params : Array(DB::Any)) : Int64
+        def execute_insert(sql : String, params : Array(Quo::Value)) : Int64
           Logging.instrument(sql, params, :insert) do
             @conn.exec(sql, args: params).rows_affected
           end
         end
 
-        def execute_update(sql : String, params : Array(DB::Any)) : Int64
+        def execute_update(sql : String, params : Array(Quo::Value)) : Int64
           Logging.instrument(sql, params, :update) do
             @conn.exec(sql, args: params).rows_affected
           end
         end
 
-        def execute_delete(sql : String, params : Array(DB::Any)) : Int64
+        def execute_delete(sql : String, params : Array(Quo::Value)) : Int64
           Logging.instrument(sql, params, :delete) do
             @conn.exec(sql, args: params).rows_affected
           end

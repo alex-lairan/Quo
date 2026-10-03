@@ -13,7 +13,7 @@ module Quo
   # Query event for instrumentation
   struct QueryEvent
     getter sql : String
-    getter params : Array(DB::Any)
+    getter params : Array(Quo::Value)
     getter duration : Time::Span          # Total time
     getter compile_time : Time::Span      # Time to build/compile SQL
     getter execute_time : Time::Span      # Time to execute at DB
@@ -23,7 +23,7 @@ module Quo
 
     def initialize(
       @sql : String,
-      @params : Array(DB::Any) = [] of DB::Any,
+      params : Array(Quo::Value)? = nil,
       @duration : Time::Span = Time::Span.zero,
       @compile_time : Time::Span = Time::Span.zero,
       @execute_time : Time::Span = Time::Span.zero,
@@ -31,6 +31,7 @@ module Quo
       @rows_affected : Int64? = nil,
       @error : Exception? = nil
     )
+      @params = (params.nil? ? ([] of Quo::Value) : params).as(Array(Quo::Value))
     end
 
     def success?
@@ -206,7 +207,7 @@ module Quo
     end
 
     # Wrap a block and log its execution (legacy - no timing breakdown)
-    def self.instrument(sql : String, params : Array(DB::Any), operation : Symbol, &block)
+    def self.instrument(sql : String, params : Array(Quo::Value), operation : Symbol, &block)
       return yield unless @@enabled || !@@subscribers.empty?
 
       start_time = Time.utc
@@ -241,7 +242,7 @@ module Quo
     # Instrument with separate compile and execute timing
     def self.instrument_with_timing(
       sql : String,
-      params : Array(DB::Any),
+      params : Array(Quo::Value),
       operation : Symbol,
       compile_time : Time::Span,
       &block
@@ -284,7 +285,7 @@ module Quo
       end
     end
 
-    private def self.format_params(params : Array(DB::Any)) : String
+    private def self.format_params(params : Array(Quo::Value)) : String
       formatted = params.map do |p|
         case p
         when String

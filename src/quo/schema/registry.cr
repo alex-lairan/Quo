@@ -39,7 +39,7 @@ module Quo
     end
 
     # Validate column and check type compatibility
-    def self.validate_column_value!(table_name : Symbol, column_name : Symbol, value : DB::Any) : Nil
+    def self.validate_column_value!(table_name : Symbol, column_name : Symbol, value : Quo::Value) : Nil
       schema = get(table_name)
       return unless schema # Skip validation if schema not registered
 
@@ -57,7 +57,7 @@ module Quo
     end
 
     # Validate that a value is compatible with a column's type
-    private def self.validate_type!(table_name : Symbol, column : Column, value : DB::Any) : Nil
+    private def self.validate_type!(table_name : Symbol, column : Column, value : Quo::Value) : Nil
       return if value.nil? && column.nullable?
 
       expected_type = column.type_name
@@ -77,7 +77,7 @@ module Quo
                    when "Time"
                      value.is_a?(Time)
                    when "UUID"
-                     value.is_a?(String) # UUIDs are typically passed as strings
+                     value.is_a?(String) || value.is_a?(UUID) # Accept both String and UUID objects
                    else
                      true # Unknown types pass validation
                    end

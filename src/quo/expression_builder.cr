@@ -11,7 +11,7 @@ module Quo
     # Create a raw SQL expression
     # Example: raw("NOW()") or raw("$1::uuid", some_value)
     def raw(sql : String, *params) : Raw
-      Raw.new(sql, params.to_a.map { |p| p.as(DB::Any) })
+      Raw.new(sql, params.to_a.map { |p| p.as(Quo::Value) })
     end
 
     # Create a NOT expression
