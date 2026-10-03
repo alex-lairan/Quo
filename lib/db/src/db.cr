@@ -89,7 +89,7 @@ module DB
 
   # See `DB::TYPES` in `DB`. `Any` is a union of all types in `DB::TYPES`
   {% begin %}
-    alias Any = Union({{*TYPES}})
+    alias Any = Union({{TYPES.splat}})
   {% end %}
 
   # Result of a `#exec` statement.
@@ -161,7 +161,7 @@ module DB
     connection_options = driver.connection_options(params)
     pool_options = driver.pool_options(params)
     builder = driver.connection_builder(uri)
-    factory = ->{ builder.build }
+    factory = -> { builder.build }
     Database.new(connection_options, pool_options, &factory)
   end
 

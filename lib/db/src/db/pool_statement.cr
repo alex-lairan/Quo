@@ -15,7 +15,7 @@ module DB
     end
 
     # See `QueryMethods#exec`
-    def exec(*args_, args : Array? = nil) : ExecResult
+    def exec(*args_, args : Enumerable? = nil) : ExecResult
       statement_with_retry &.exec(*args_, args: args)
     end
 
@@ -25,12 +25,12 @@ module DB
     end
 
     # See `QueryMethods#query`
-    def query(*args_, args : Array? = nil) : ResultSet
+    def query(*args_, args : Enumerable? = nil) : ResultSet
       statement_with_retry &.query(*args_, args: args)
     end
 
     # See `QueryMethods#scalar`
-    def scalar(*args_, args : Array? = nil)
+    def scalar(*args_, args : Enumerable? = nil)
       statement_with_retry &.scalar(*args_, args: args)
     end
 
@@ -38,7 +38,7 @@ module DB
     # the conneciton is registered in `@connections`
     private abstract def build_statement : Statement
 
-    private def statement_with_retry
+    private def statement_with_retry(&)
       @db.retry do
         return yield build_statement
       end

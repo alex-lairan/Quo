@@ -17,7 +17,7 @@ module PG
       super(options)
 
       begin
-        @connection.connect
+        @connection.connect(replication: @connection.conninfo.replication)
       rescue ex
         raise DB::ConnectionRefused.new(cause: ex)
       end
@@ -35,6 +35,22 @@ module PG
     def exec_all(query : String) : Nil
       PQ::SimpleQuery.new(@connection, query)
       nil
+    end
+
+    # Execute a "COPY" query and return an IO object to read from or write to,
+    # depending on the query.
+    #
+    # ```
+    # data = conn.exec_copy("COPY table TO STDOUT").gets_to_end
+    # ```
+    #
+    # ```
+    # writer = conn.exec_copy "COPY table FROM STDIN")
+    # writer << data
+    # writer.close
+    # ```
+    def exec_copy(query : String) : CopyResult
+      CopyResult.new connection, query
     end
 
     # Set the callback block for notices and errors.
@@ -76,6 +92,14 @@ module PG
         @connection.read_async_frame_loop
       else
         spawn { @connection.read_async_frame_loop }
+      end
+    end
+
+    protected def listen_replication(publication_name : String, slot_name : String, start_lsn : Int64 = 0i64, blocking : Bool = false, &block : Replication::Frame ->)
+      if blocking
+        @connection.start_replication_frame_loop(publication_name, slot_name, start_lsn, &block)
+      else
+        spawn { @connection.start_replication_frame_loop(publication_name, slot_name, start_lsn, &block) }
       end
     end
 

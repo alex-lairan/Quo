@@ -1,4 +1,5 @@
 require "db"
+require "uuid"
 
 # Quo - A ROM-rb inspired query builder for Crystal
 #

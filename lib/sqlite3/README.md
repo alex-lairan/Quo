@@ -1,4 +1,6 @@
-# crystal-sqlite3 [![Build Status](https://travis-ci.org/crystal-lang/crystal-sqlite3.svg?branch=master)](https://travis-ci.org/crystal-lang/crystal-sqlite3)
+[![CI](https://github.com/crystal-lang/crystal-sqlite3/actions/workflows/ci.yml/badge.svg)](https://github.com/crystal-lang/crystal-sqlite3/actions/workflows/ci.yml)
+
+# crystal-sqlite3
 
 SQLite3 bindings for [Crystal](http://crystal-lang.org/).
 
@@ -41,6 +43,9 @@ DB.open "sqlite3://./data.db" do |db|
       # => John Doe (30)
     end
   end
+
+  contacts = db.query_all "SELECT name, age FROM contacts", as: {name: String, age: Int64}
+  puts contacts # => [{name: "John Doe", age: 30}, {name: "Sarah", age: 33}]
 end
 ```
 
@@ -84,3 +89,7 @@ in no error by the library.
 [pragma-jm]: https://www.sqlite.org/pragma.html#pragma_journal_mode
 [pragma-sync]: https://www.sqlite.org/pragma.html#pragma_synchronous
 [pragma-walck]: https://www.sqlite.org/pragma.html#pragma_wal_autocheckpoint
+
+## Guides
+
+- [Compile and link SQLite](compile_and_link_sqlite.md)

@@ -4,7 +4,7 @@ require "system/user"
 
 module PQ
   struct ConnInfo
-    SOCKET_SEARCH = %w(/run/postgresql/.s.PGSQL.5432 /tmp/.s.PGSQL.5432 /var/run/postgresql/.s.PGSQL.5432)
+    SOCKET_SEARCH = %w(/run/postgresql /tmp /var/run/postgresql)
 
     SUPPORTED_AUTH_METHODS = %w[cleartext md5 scram-sha-256 scram-sha-256-plus]
 
@@ -38,15 +38,17 @@ module PQ
     # The application name. Optional (defaults to "crystal").
     getter application_name : String
 
+    getter replication : String?
+
     getter auth_methods : Array(String) = %w[scram-sha-256-plus scram-sha-256 md5]
 
     # Create a new ConnInfo from all parts
-    def initialize(host : String? = nil, database : String? = nil, user : String? = nil, password : String? = nil, port : Int | String? = nil, sslmode : String | Symbol? = nil, application_name : String? = nil)
-      @host = default_host host
+    def initialize(host : String? = nil, database : String? = nil, user : String? = nil, password : String? = nil, port : Int | String? = nil, sslmode : String | Symbol? = nil, application_name : String? = nil, @replication = nil)
+      @port = (port || ENV.fetch("PGPORT", "5432")).to_i
+      @host = default_host(host, @port)
       db = default_database database
       @database = db.lchop('/')
       @user = default_user user
-      @port = (port || ENV.fetch("PGPORT", "5432")).to_i
       @sslmode = default_sslmode sslmode
       @password = password || ENV.fetch("PGPASSWORD", PgPass.locate(@host, @port, @database, @user))
       @application_name = default_application_name application_name
@@ -77,7 +79,8 @@ module PQ
     def initialize(uri : URI)
       params = URI::Params.parse(uri.query.to_s)
       hostname = uri.hostname.presence || params.fetch("host", "")
-      initialize(hostname, uri.path, uri.user, uri.password, uri.port, :prefer, params.fetch("application_name", nil))
+      port = uri.port || params["port"]?
+      initialize(hostname, uri.path, uri.user, uri.password, port, :prefer, params.fetch("application_name", nil), params["replication"]?)
       if q = uri.query
         HTTP::Params.parse(q) do |key, value|
           handle_sslparam(key, value)
@@ -89,10 +92,10 @@ module PQ
     #
     # Valid keys match Postgres "conninfo" keys and are `"host"`, `"dbname"`,
     # `"user"`, `"password"`, `"port"`, `"sslmode"`, `"sslcert"`, `"sslkey"`,
-    # `"sslrootcert"` and `"application_name"`.
+    # `"sslrootcert"`, `"application_name"`, and `"replication"`.
     def initialize(params : Hash)
       initialize(params["host"]?, params["dbname"]?, params["user"]?,
-        params["password"]?, params["port"]?, params["sslmode"]?, params["application_name"]?)
+        params["password"]?, params["port"]?, params["sslmode"]?, params["application_name"]?, params["replication"]?)
       params.each do |key, value|
         handle_sslparam(key, value)
       end
@@ -121,18 +124,19 @@ module PQ
       end
     end
 
-    private def default_host(h)
-      return h if h && !h.blank?
+    private def default_host(h, port)
+      socket_name = ".s.PGSQL.#{port}"
 
-      if pghost = ENV["PGHOST"]?
-        return pghost[0] == '/' ? "#{pghost}/.s.PGSQL.5432" : pghost
+      if host = h.presence || ENV["PGHOST"]?
+        host = Path.new(host)
+        # For backwards compatibility:
+        # Check if the path is pointing to the socket file and replace it with
+        # the directory that contains the socket instead
+        host = host.basename == socket_name ? host.parent : host
+        return host.to_s
       end
 
-      SOCKET_SEARCH.each do |s|
-        return s if File.exists?(s)
-      end
-
-      "localhost"
+      SOCKET_SEARCH.find { |s| File.exists?(File.join(s, socket_name)) } || "localhost"
     end
 
     private def default_database(db)
@@ -171,7 +175,13 @@ module PQ
     end
 
     private def current_user_name
-      System::User.find_by(id: LibC.getuid.to_s).username
+      {% if flag?(:windows) %}
+        # NOTE: actually getting the current username on windows would be better
+        #       https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getusernamew
+        "postgres"
+      {% else %}
+        System::User.find_by(id: LibC.getuid.to_s).username
+      {% end %}
     end
   end
 end

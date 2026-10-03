@@ -188,7 +188,7 @@ module DB
     # Will retry the block if a `ConnectionLost` exception is thrown.
     # It will try to reuse all of the available connection right away,
     # but if a new connection is needed there is a `retry_delay` seconds delay.
-    def retry
+    def retry(&)
       current_available = 0
 
       sync do
@@ -209,15 +209,15 @@ module DB
           sync { delete(e.resource) }
         rescue e : PoolResourceRefused
           # a ConnectionRefused means a new connection
-          # was intended to be created
-          # nothing to due but to retry soon
+          # was intended to be created,
+          # nothing to do but to retry soon
         end
       end
       raise PoolRetryAttemptsExceeded.new
     end
 
     # :nodoc:
-    def each_resource
+    def each_resource(&)
       sync do
         @idle.each do |resource|
           yield resource
@@ -265,7 +265,7 @@ module DB
       end
     end
 
-    private def sync
+    private def sync(&)
       @mutex.lock
       begin
         yield
@@ -274,7 +274,7 @@ module DB
       end
     end
 
-    private def unsync
+    private def unsync(&)
       @mutex.unlock
       begin
         yield

@@ -3,7 +3,7 @@ require "../../src/pq/conninfo"
 require "../../src/pq/pgpass"
 require "log/spec"
 
-def create_empty_pgpass_file
+def create_empty_pgpass_file(&)
   tempfile = File.tempfile("pgpass")
   begin
     File.chmod(tempfile.path, 0o0600)
@@ -13,7 +13,7 @@ def create_empty_pgpass_file
   end
 end
 
-def create_valid_pgpass_file
+def create_valid_pgpass_file(&)
   create_empty_pgpass_file do |filename|
     File.write(filename, <<-PGPASS)
 host:1:database:user:pass
@@ -26,7 +26,7 @@ PGPASS
   end
 end
 
-def create_invalid_pgpass_file
+def create_invalid_pgpass_file(&)
   create_empty_pgpass_file do |filename|
     File.write(filename, "host:1:database:user")
     yield filename
@@ -57,7 +57,7 @@ describe PQ::PgPass, ".parsing" do
       create_valid_pgpass_file do |filename|
         File.chmod(filename, 0o0700)
         ENV["PGPASSFILE"] = filename
-        Log.capture {
+        Log.capture("pg") {
           ci = PQ::ConnInfo.from_conninfo_string("postgres://")
         }.itself
           .check(:warn, "Cannot use pgpass file - permissions are inappropriate must be 0600 or less")
@@ -70,7 +70,7 @@ describe PQ::PgPass, ".parsing" do
     env_var_bubble do
       create_invalid_pgpass_file do |filename|
         ENV["PGPASSFILE"] = filename
-        Log.capture {
+        Log.capture("pg") {
           ci = PQ::ConnInfo.from_conninfo_string("postgres://")
         }.itself
           .check(:warn, "PGPass file does not appear to be properly formatted - errors may occur")
